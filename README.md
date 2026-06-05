@@ -4,7 +4,7 @@
 
 Проект не является отдельным PNG-компрессором. Это оболочка для `pngquant`: сначала установите `pngquant.exe`, положите его рядом с приложением или разрешите приложению скачать официальный Windows-бинарник при первом запуске.
 
-![PngQuant Context UI preview](assets/preview.png)
+![PngQuant Context UI preview](assets/readme-preview.png)
 
 ## Навигация
 
