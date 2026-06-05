@@ -1,32 +1,37 @@
 # PngQuant Context UI
 
-Small Windows context-menu UI for compressing PNG files with `pngquant`.
+Small Windows 11 Explorer context-menu UI for compressing PNG files with `pngquant`.
+
+This project is not a PNG compressor by itself. It is a lightweight UI/context-menu extension for the `pngquant` command-line tool. Install `pngquant` first, bundle it next to this app, or let the app download the official Windows binary on first run.
 
 It adds one native Explorer cascading menu:
 
 ```text
-Сжать PNG
+Compress PNG
 ```
 
 The submenu contains quick presets:
 
-- `Сжать PNG как копию`
-- `Сжать PNG и заменить`
-- `Настройки`
+- `Compress PNG as copy`
+- `Compress PNG and replace`
+- `Settings`
 
-The first two commands start compression immediately with the balanced preset. `Настройки` opens the compact UI where you can choose output mode, preset, and optional no-dithering mode.
+The first two commands start compression immediately with the balanced preset. `Settings` opens the compact UI where you can choose output mode, preset, and optional no-dithering mode.
 
 When several PNG files are selected, Windows may launch the menu command once per file. The app merges those launches into one batch window automatically.
 
-## Requirements
+## Requirements and Compatibility
 
-- Windows 10/11.
+- Recommended and tested target: Windows 11 with the classic/legacy Explorer context menu.
+- Other Windows versions and third-party shells are not verified.
 - `.NET Framework 4.x` runtime.
 - `pngquant.exe` placed next to the app as either:
   - `pngquant.exe`
   - `pngquant\pngquant.exe`
 
-For a public release, bundle `pngquant.exe` only if its license terms are satisfied, or ask users to download it separately from <https://pngquant.org/>.
+If `pngquant.exe` is missing, the app shows a setup prompt instead of a hard error and can download the official Windows archive from <https://pngquant.org/pngquant-windows.zip>. The official project page is <https://pngquant.org/>.
+
+For a public release, bundle `pngquant.exe` only if its license terms are satisfied. `pngquant` is distributed separately from this UI wrapper.
 
 ## Build
 

@@ -56,13 +56,13 @@ foreach ($oldKey in $oldKeys) {
 }
 
 $items = @(
-  @{ Key = '01CompressCopy'; Label = 'Сжать PNG как копию'; Args = '--auto --mode copy --preset balanced "%1"' },
-  @{ Key = '02CompressReplace'; Label = 'Сжать PNG и заменить'; Args = '--auto --mode replace --preset balanced "%1"' },
-  @{ Key = '03Settings'; Label = 'Настройки'; Args = '"%1"' }
+  @{ Key = '01CompressCopy'; Label = 'Compress PNG as copy'; Args = '--auto --mode copy --preset balanced "%1"' },
+  @{ Key = '02CompressReplace'; Label = 'Compress PNG and replace'; Args = '--auto --mode replace --preset balanced "%1"' },
+  @{ Key = '03Settings'; Label = 'Settings'; Args = '"%1"' }
 )
 
 & reg.exe add $baseReg /f | Out-Null
-& reg.exe add $baseReg /v MUIVerb /d 'Сжать PNG' /f | Out-Null
+& reg.exe add $baseReg /v MUIVerb /d 'Compress PNG' /f | Out-Null
 & reg.exe add $baseReg /v Icon /d $iconValue /f | Out-Null
 & reg.exe add $baseReg /v SubCommands /d '' /f | Out-Null
 & reg.exe delete $baseReg /v AppliesTo /f 2>$null | Out-Null
@@ -80,4 +80,4 @@ foreach ($item in $items) {
 }
 
 Write-Host "Installed to: $InstallDir"
-Write-Host 'Context menu: Сжать PNG'
+Write-Host 'Context menu: Compress PNG'

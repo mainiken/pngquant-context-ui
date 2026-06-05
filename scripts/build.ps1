@@ -28,7 +28,7 @@ if (Test-Path -LiteralPath $icon) {
   $win32Icon = @('/win32icon:' + $icon)
 }
 
-& $csc /nologo /target:winexe /codepage:65001 /out:$out @win32Icon $src /reference:System.Windows.Forms.dll /reference:System.Drawing.dll
+& $csc /nologo /target:winexe /codepage:65001 /out:$out @win32Icon $src /reference:System.Windows.Forms.dll /reference:System.Drawing.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }

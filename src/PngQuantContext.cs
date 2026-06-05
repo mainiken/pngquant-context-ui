@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -11,6 +13,8 @@ internal static class PngQuantContext
     private static readonly string AppDirectory = AppDomain.CurrentDomain.BaseDirectory;
     private static readonly string QueueDirectory = Path.Combine(Path.GetTempPath(), "PngQuantContext");
     private static readonly string LogPath = Path.Combine(AppDirectory, "PngQuantContext.log");
+    private const string PngQuantDownloadUrl = "https://pngquant.org/pngquant-windows.zip";
+    private const string PngQuantWebsiteUrl = "https://pngquant.org/";
 
     [STAThread]
     private static int Main(string[] args)
@@ -38,12 +42,14 @@ internal static class PngQuantContext
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
-        var pngquant = FindPngQuant();
+        var pngquant = EnsurePngQuantAvailable();
         if (pngquant == null || files.Count == 0)
         {
             MessageBox.Show(
-                "Не найден pngquant.exe или PNG-файл для сжатия.",
-                "Сжать PNG",
+                pngquant == null
+                    ? "pngquant.exe is required to compress PNG files."
+                    : "No PNG file was passed to the application.",
+                "Compress PNG",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
             if (instance != null)
@@ -64,6 +70,25 @@ internal static class PngQuantContext
         }
 
         return 0;
+    }
+
+    private static string EnsurePngQuantAvailable()
+    {
+        var pngquant = FindPngQuant();
+        if (pngquant != null)
+        {
+            return pngquant;
+        }
+
+        using (var form = new PngQuantInstallForm())
+        {
+            if (form.ShowDialog() == DialogResult.OK)
+            {
+                return FindPngQuant();
+            }
+        }
+
+        return null;
     }
 
     private static RunOptions ParseArguments(string[] args)
@@ -193,6 +218,207 @@ internal static class PngQuantContext
         return Path.Combine(QueueDirectory, "files.txt");
     }
 
+    private sealed class PngQuantInstallForm : Form
+    {
+        private readonly Label _status;
+        private readonly ProgressBar _progress;
+        private readonly Button _downloadButton;
+        private readonly Button _websiteButton;
+        private readonly Button _cancelButton;
+        private bool _downloadStarted;
+
+        public PngQuantInstallForm()
+        {
+            Text = "pngquant is required";
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ClientSize = new Size(500, 190);
+            Font = new Font("Segoe UI", 9);
+
+            var title = new Label
+            {
+                AutoSize = false,
+                Location = new Point(18, 16),
+                Size = new Size(464, 24),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Text = "PngQuant Context UI needs pngquant.exe"
+            };
+
+            var description = new Label
+            {
+                AutoSize = false,
+                Location = new Point(18, 48),
+                Size = new Size(464, 44),
+                Text = "This app is a Windows context-menu UI for pngquant. It cannot compress PNG files until the pngquant command-line binary is installed."
+            };
+
+            _status = new Label
+            {
+                AutoSize = false,
+                Location = new Point(18, 98),
+                Size = new Size(464, 22),
+                Text = "Download the official Windows binary from pngquant.org?"
+            };
+
+            _progress = new ProgressBar
+            {
+                Location = new Point(18, 126),
+                Size = new Size(464, 18),
+                Minimum = 0,
+                Maximum = 100,
+                Value = 0
+            };
+
+            _downloadButton = new Button
+            {
+                Location = new Point(188, 154),
+                Size = new Size(110, 28),
+                Text = "Download"
+            };
+            _downloadButton.Click += delegate { StartDownload(); };
+
+            _websiteButton = new Button
+            {
+                Location = new Point(304, 154),
+                Size = new Size(92, 28),
+                Text = "Website"
+            };
+            _websiteButton.Click += delegate
+            {
+                Process.Start(new ProcessStartInfo(PngQuantWebsiteUrl) { UseShellExecute = true });
+            };
+
+            _cancelButton = new Button
+            {
+                Location = new Point(402, 154),
+                Size = new Size(80, 28),
+                Text = "Cancel"
+            };
+            _cancelButton.Click += delegate
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
+            };
+
+            Controls.Add(title);
+            Controls.Add(description);
+            Controls.Add(_status);
+            Controls.Add(_progress);
+            Controls.Add(_downloadButton);
+            Controls.Add(_websiteButton);
+            Controls.Add(_cancelButton);
+        }
+
+        private void StartDownload()
+        {
+            if (_downloadStarted)
+            {
+                return;
+            }
+
+            _downloadStarted = true;
+            _downloadButton.Enabled = false;
+            _websiteButton.Enabled = false;
+            _cancelButton.Enabled = false;
+            _status.Text = "Downloading pngquant...";
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    var installedPath = DownloadAndInstallPngQuant();
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        _progress.Value = 100;
+                        _status.Text = "Installed: " + installedPath;
+                        DialogResult = DialogResult.OK;
+                        Close();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        _status.Text = "Download failed. Use Website to install pngquant manually.";
+                        _downloadButton.Enabled = true;
+                        _websiteButton.Enabled = true;
+                        _cancelButton.Enabled = true;
+                        _downloadStarted = false;
+                        MessageBox.Show(
+                            ex.Message,
+                            "pngquant download failed",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Error);
+                    });
+                }
+            });
+        }
+
+        private string DownloadAndInstallPngQuant()
+        {
+            ServicePointManager.SecurityProtocol = ServicePointManager.SecurityProtocol | (SecurityProtocolType)3072;
+
+            var tempZip = Path.Combine(Path.GetTempPath(), "pngquant-windows.zip");
+            if (File.Exists(tempZip))
+            {
+                File.Delete(tempZip);
+            }
+
+            using (var client = new WebClient())
+            {
+                client.DownloadProgressChanged += delegate(object sender, DownloadProgressChangedEventArgs args)
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        _progress.Value = Math.Min(Math.Max(args.ProgressPercentage, 0), 100);
+                    });
+                };
+                client.DownloadFile(PngQuantDownloadUrl, tempZip);
+            }
+
+            var targetDir = Path.Combine(AppDirectory, "pngquant");
+            var targetExe = Path.Combine(targetDir, "pngquant.exe");
+            Directory.CreateDirectory(targetDir);
+
+            using (var zip = ZipFile.OpenRead(tempZip))
+            {
+                ZipArchiveEntry pngquantEntry = null;
+
+                foreach (var entry in zip.Entries)
+                {
+                    if (string.Equals(Path.GetFileName(entry.FullName), "pngquant.exe", StringComparison.OrdinalIgnoreCase))
+                    {
+                        pngquantEntry = entry;
+                        break;
+                    }
+                }
+
+                if (pngquantEntry == null)
+                {
+                    throw new InvalidOperationException("The downloaded archive does not contain pngquant.exe.");
+                }
+
+                using (var source = pngquantEntry.Open())
+                using (var target = File.Create(targetExe))
+                {
+                    source.CopyTo(target);
+                }
+            }
+
+            try
+            {
+                File.Delete(tempZip);
+            }
+            catch
+            {
+            }
+
+            return targetExe;
+        }
+    }
+
     private sealed class RunOptions
     {
         public readonly List<string> Files = new List<string>();
@@ -227,7 +453,7 @@ internal static class PngQuantContext
             _files = files;
             _autoRun = options.AutoRun;
 
-            Text = "Сжать PNG";
+            Text = "Compress PNG";
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
@@ -241,7 +467,7 @@ internal static class PngQuantContext
                 Location = new Point(18, 14),
                 Size = new Size(424, 24),
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                Text = "PNG: " + files.Count + " файл(ов)"
+                Text = "PNG files: " + files.Count
             };
 
             var modeLabel = new Label
@@ -249,14 +475,14 @@ internal static class PngQuantContext
                 AutoSize = false,
                 Location = new Point(18, 48),
                 Size = new Size(80, 20),
-                Text = "Режим"
+                Text = "Mode"
             };
 
             _copyMode = new RadioButton
             {
                 Location = new Point(104, 46),
                 Size = new Size(96, 22),
-                Text = "Копия",
+                Text = "Copy",
                 Checked = !options.Replace
             };
 
@@ -264,7 +490,7 @@ internal static class PngQuantContext
             {
                 Location = new Point(206, 46),
                 Size = new Size(96, 22),
-                Text = "Заменить",
+                Text = "Replace",
                 Checked = options.Replace
             };
 
@@ -273,7 +499,7 @@ internal static class PngQuantContext
                 AutoSize = false,
                 Location = new Point(18, 82),
                 Size = new Size(80, 20),
-                Text = "Пресет"
+                Text = "Preset"
             };
 
             _preset = new ComboBox
@@ -291,7 +517,7 @@ internal static class PngQuantContext
             {
                 Location = new Point(104, 110),
                 Size = new Size(230, 22),
-                Text = "Без dithering",
+                Text = "Disable dithering",
                 Checked = options.NoDither
             };
 
@@ -300,7 +526,7 @@ internal static class PngQuantContext
                 AutoSize = false,
                 Location = new Point(18, 145),
                 Size = new Size(424, 34),
-                Text = "Готово к сжатию."
+                Text = "Ready to compress."
             };
 
             _progress = new ProgressBar
@@ -326,7 +552,7 @@ internal static class PngQuantContext
             {
                 Location = new Point(244, 224),
                 Size = new Size(96, 28),
-                Text = "Сжать"
+                Text = "Compress"
             };
             _startButton.Click += delegate { StartCompression(); };
 
@@ -334,7 +560,7 @@ internal static class PngQuantContext
             {
                 Location = new Point(346, 224),
                 Size = new Size(96, 28),
-                Text = "Закрыть"
+                Text = "Close"
             };
             _closeButton.Click += delegate { Close(); };
 
@@ -396,7 +622,7 @@ internal static class PngQuantContext
                 var exitCode = -1;
                 var timedOut = false;
 
-                SetProgress(i, "Сжимаю: " + Path.GetFileName(file), (i + 1) + " из " + _files.Count, true);
+                SetProgress(i, "Compressing: " + Path.GetFileName(file), (i + 1) + " of " + _files.Count, true);
 
                 using (var process = new Process())
                 {
@@ -488,11 +714,11 @@ internal static class PngQuantContext
             BeginInvoke((MethodInvoker)delegate
             {
                 _status.Text = failed == 0
-                    ? "Готово: сжато " + done + " PNG."
-                    : "Готово: сжато " + done + ", ошибок " + failed + ".";
+                    ? "Done: compressed " + done + " PNG file(s)."
+                    : "Done: compressed " + done + ", failed " + failed + ".";
                 _details.Text = failed == 0
-                    ? (replace ? "Исходные файлы заменены." : "Сжатые копии созданы рядом с исходниками.")
-                    : "Подробности: " + LogPath;
+                    ? (replace ? "Source files were replaced." : "Compressed copies were created next to source files.")
+                    : "Details: " + LogPath;
                 _startButton.Enabled = true;
                 _closeButton.Enabled = true;
                 _closeButton.Focus();
