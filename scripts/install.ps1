@@ -22,6 +22,12 @@ if (-not (Test-Path -LiteralPath $exeSource)) {
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 Copy-Item -LiteralPath $exeSource -Destination (Join-Path $InstallDir 'PngQuantContext.exe') -Force
 
+$iconSource = Join-Path $root 'assets\PngQuantContext.ico'
+$installedIcon = Join-Path $InstallDir 'PngQuantContext.ico'
+if (Test-Path -LiteralPath $iconSource) {
+  Copy-Item -LiteralPath $iconSource -Destination $installedIcon -Force
+}
+
 $distPngquant = Join-Path $dist 'pngquant\pngquant.exe'
 if (Test-Path -LiteralPath $distPngquant) {
   New-Item -ItemType Directory -Path (Join-Path $InstallDir 'pngquant') -Force | Out-Null
@@ -32,7 +38,7 @@ if (Test-Path -LiteralPath $distPngquant) {
 }
 
 $installedExe = Join-Path $InstallDir 'PngQuantContext.exe'
-$iconValue = "$installedExe,0"
+$iconValue = if (Test-Path -LiteralPath $installedIcon) { $installedIcon } else { "$installedExe,0" }
 $baseReg = 'HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext'
 
 $oldKeys = @(

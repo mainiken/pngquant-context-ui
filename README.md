@@ -1,119 +1,203 @@
 # PngQuant Context UI
 
-Small Windows 11 Explorer context-menu UI for compressing PNG files with `pngquant`.
+Компактное UI-расширение для классического контекстного меню Windows 11, которое сжимает PNG-файлы через `pngquant`.
 
-This project is not a PNG compressor by itself. It is a lightweight UI/context-menu extension for the `pngquant` command-line tool. Install `pngquant` first, bundle it next to this app, or let the app download the official Windows binary on first run.
+Проект не является отдельным PNG-компрессором. Это оболочка для `pngquant`: сначала установите `pngquant.exe`, положите его рядом с приложением или разрешите приложению скачать официальный Windows-бинарник при первом запуске.
 
-It adds one native Explorer cascading menu:
+## Навигация
+
+- [Возможности](#возможности)
+- [Контекстное меню](#контекстное-меню)
+- [Интерфейс](#интерфейс)
+- [Требования и совместимость](#требования-и-совместимость)
+- [Сборка](#сборка)
+- [Установка](#установка)
+- [Удаление](#удаление)
+- [Реестр вручную](#реестр-вручную)
+- [Поддержать проект](#поддержать-проект)
+- [Ссылки](#ссылки)
+- [Примечания](#примечания)
+
+## Возможности
+
+- Один каскадный пункт в контекстном меню Explorer.
+- Быстрое сжатие PNG как копии или с заменой оригинала.
+- Автоматическое объединение нескольких запусков Windows в одно batch-окно.
+- Очередь файлов с размером до/после, экономией и статусом.
+- Кнопка остановки текущего `pngquant`-процесса.
+- Светлая и темная тема.
+- Настройки в компактном меню `...`.
+- Встроенный flow установки `pngquant`, если он отсутствует.
+
+[Наверх](#pngquant-context-ui)
+
+## Контекстное меню
+
+Приложение добавляет один пункт:
 
 ```text
 Compress PNG
 ```
 
-The submenu contains quick presets:
+Внутри него находятся команды:
 
 - `Compress PNG as copy`
 - `Compress PNG and replace`
 - `Settings`
 
-The first two commands start compression immediately with the balanced preset. `Settings` opens the compact UI without auto-start so you can adjust options before running compression.
+Первые две команды сразу запускают сжатие с пресетом `Balanced`. Команда `Settings` открывает окно без автостарта, чтобы можно было поменять режим, preset, dithering и тему.
 
-When several PNG files are selected, Windows may launch the menu command once per file. The app merges those launches into one batch window automatically.
+Если выбрано несколько PNG-файлов, Windows может запустить команду отдельно для каждого файла. Приложение собирает эти запуски в одну очередь автоматически.
 
-## UI
+[Наверх](#pngquant-context-ui)
 
-The main compression window is intentionally small because the app is normally launched from Explorer. It shows:
+## Интерфейс
 
-- a per-file queue;
-- file name and current status;
-- input size, output size, and saved size;
-- overall file progress;
-- `Cancel` while compression is running.
+Главное окно специально сделано небольшим, потому что приложение обычно запускается из Explorer. В нем показаны:
 
-Compression options are in the small `...` settings menu:
+- список файлов;
+- статус каждого файла;
+- размер до и после сжатия;
+- сколько удалось сохранить;
+- общий прогресс по очереди;
+- `Cancel` во время выполнения.
 
-- copy or replace mode;
-- balanced, quality, or fast preset;
-- no-dithering toggle;
-- light or dark theme;
-- About, version, and GitHub link.
+Настройки открываются через кнопку `...`:
 
-The progress bar tracks completed files in the queue. `pngquant` does not expose percentage progress inside a single file, so the UI does not fake per-file percentages. `Cancel` stops the current `pngquant` process and marks the remaining queued files as cancelled.
+- режим `Copy` или `Replace`;
+- preset `Balanced`, `Quality` или `Fast`;
+- переключатель `No dithering`;
+- тема `Light` или `Dark`;
+- `About` с версией и ссылкой на GitHub.
 
-## Requirements and Compatibility
+`pngquant` не отдает процент выполнения внутри одного файла, поэтому приложение не рисует фейковый per-file progress. Прогрессбар показывает завершенные файлы в очереди.
 
-- Recommended and tested target: Windows 11 with the classic/legacy Explorer context menu.
-- Other Windows versions and third-party shells are not verified.
-- `.NET Framework 4.x` runtime.
-- `pngquant.exe` placed next to the app as either:
+[Наверх](#pngquant-context-ui)
+
+## Требования и совместимость
+
+- Рекомендуемая и проверенная среда: Windows 11 с классическим/legacy контекстным меню Explorer.
+- Другие версии Windows и сторонние shell-расширения не проверялись.
+- `.NET Framework 4.x`.
+- `pngquant.exe` рядом с приложением:
   - `pngquant.exe`
   - `pngquant\pngquant.exe`
 
-If `pngquant.exe` is missing, the app shows a setup prompt instead of a hard error and can download the official Windows archive from <https://pngquant.org/pngquant-windows.zip>. The official project page is <https://pngquant.org/>.
+Если `pngquant.exe` не найден, приложение не показывает жесткую ошибку. Вместо этого оно предлагает скачать официальный архив Windows с <https://pngquant.org/pngquant-windows.zip>.
 
-For a public release, bundle `pngquant.exe` only if its license terms are satisfied. `pngquant` is distributed separately from this UI wrapper.
+`pngquant` распространяется отдельно от этой UI-оболочки. Для публичных релизов включайте `pngquant.exe` в архив только если условия его лицензии это позволяют.
 
-## Build
+[Наверх](#pngquant-context-ui)
 
-Run from PowerShell:
+## Сборка
+
+Запуск из PowerShell:
 
 ```powershell
 .\scripts\build.ps1
 ```
 
-Output:
+Результат:
 
 ```text
 dist\PngQuantContext.exe
 ```
 
-To copy `pngquant.exe` into the local `dist` folder during build:
+Сборка с копированием локального `pngquant.exe` в `dist`:
 
 ```powershell
 .\scripts\build.ps1 -PngQuantPath "C:\Tools\pngquant\pngquant.exe"
 ```
 
-## Install
+[Наверх](#pngquant-context-ui)
+
+## Установка
 
 ```powershell
 .\scripts\install.ps1
 ```
 
-If `dist\pngquant\pngquant.exe` is not present, pass a local `pngquant.exe` path:
+Если `dist\pngquant\pngquant.exe` отсутствует, можно передать путь к локальному `pngquant.exe`:
 
 ```powershell
 .\scripts\install.ps1 -PngQuantPath "C:\Tools\pngquant\pngquant.exe"
 ```
 
-Default install path:
+Путь установки по умолчанию:
 
 ```text
 %LOCALAPPDATA%\PngQuantContext
 ```
 
-The installer writes only to `HKCU`, so administrator rights are not required.
+Installer пишет только в `HKCU`, поэтому права администратора не нужны.
 
-## Uninstall
+[Наверх](#pngquant-context-ui)
+
+## Удаление
 
 ```powershell
 .\scripts\uninstall.ps1
 ```
 
-## Manual Registry
+[Наверх](#pngquant-context-ui)
 
-The installer creates the menu at the PNG extension association level, independent of the default PNG viewer:
+## Реестр вручную
+
+Installer создает меню на уровне ассоциации `.png`, независимо от текущего приложения просмотра PNG:
 
 ```text
 HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext
 ```
 
-Preset commands are nested under:
+Команды находятся здесь:
 
 ```text
 HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell
 ```
 
-## Notes
+Иконка контекстного меню указывает на установленный файл:
 
-- Compression failures are logged to `PngQuantContext.log` next to the app.
-- Copy mode writes `image-compressed.png` beside `image.png`.
+```text
+%LOCALAPPDATA%\PngQuantContext\PngQuantContext.ico
+```
+
+Если Explorer продолжает показывать старую иконку, перезапустите Explorer или сбросьте icon cache Windows. Это кэш оболочки, а не ошибка регистрации меню.
+
+[Наверх](#pngquant-context-ui)
+
+## Поддержать проект
+
+Если проект оказался полезен, можно поддержать разработку:
+
+| Валюта | Адрес |
+| --- | --- |
+| Bitcoin (BTC) | `bc1qt84nyhuzcnkh2qpva93jdqa20hp49edcl94nf6` |
+| Ethereum (ETH) | `0xc935e81045CAbE0B8380A284Ed93060dA212fa83` |
+| TON | `UQBlvCgM84ijBQn0-PVP3On0fFVWds5SOHilxbe33EDQgryz` |
+| Binance Coin | `0xc935e81045CAbE0B8380A284Ed93060dA212fa83` |
+| Solana (SOL) | `3vVxkGKasJWCgoamdJiRPy6is4di72xR98CDj2UdS1BE` |
+| Ripple (XRP) | `rPJzfBcU6B8SYU5M8h36zuPcLCgRcpKNB4` |
+| Dogecoin (DOGE) | `DST5W1c4FFzHVhruVsa2zE6jh5dznLDkmW` |
+| Polkadot (DOT) | `1US84xhUghAhrMtw2bcZh9CXN3i7T1VJB2Gdjy9hNjR3K71` |
+| Litecoin (LTC) | `ltc1qcg8qesg8j4wvk9m7e74pm7aanl34y7q9rutvwu` |
+| Matic | `0xc935e81045CAbE0B8380A284Ed93060dA212fa83` |
+| Tron (TRX) | `TQkDWCjchCLhNsGwr4YocUHEeezsB4jVo5` |
+
+[Наверх](#pngquant-context-ui)
+
+## Ссылки
+
+- GitHub проекта: <https://github.com/mainiken/pngquant-context-ui>
+- Официальный сайт `pngquant`: <https://pngquant.org/>
+- Архив `pngquant` для Windows: <https://pngquant.org/pngquant-windows.zip>
+- Telegram-канал: <https://t.me/+vpXdTJ_S3mo0ZjIy>
+
+[Наверх](#pngquant-context-ui)
+
+## Примечания
+
+- Ошибки сжатия пишутся в `PngQuantContext.log` рядом с приложением.
+- Режим `Copy` создает `image-compressed.png` рядом с `image.png`.
+- Режим `Replace` перезаписывает исходный файл.
+
+[Наверх](#pngquant-context-ui)
