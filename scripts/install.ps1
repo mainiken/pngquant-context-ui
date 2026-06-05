@@ -27,10 +27,8 @@ if (Test-Path -LiteralPath $distPngquant) {
 
 $installedExe = Join-Path $InstallDir 'PngQuantContext.exe'
 $iconValue = "$installedExe,0"
-$baseRegs = @(
-  'HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext',
-  'HKCU\Software\Classes\pngfile\shell\PngQuantContext'
-)
+$baseReg = 'HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext'
+
 $oldKeys = @(
   'Registry::HKEY_CURRENT_USER\Software\Classes\*\shell\PngQuantContext',
   'Registry::HKEY_CURRENT_USER\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext',
@@ -46,6 +44,11 @@ $oldKeys = @(
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressReplace'
 )
 
+$userChoice = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.png\UserChoice' -ErrorAction SilentlyContinue
+if ($userChoice -and $userChoice.ProgId) {
+  $oldKeys += "Registry::HKEY_CURRENT_USER\Software\Classes\$($userChoice.ProgId)\shell\PngQuantContext"
+}
+
 foreach ($oldKey in $oldKeys) {
   if (Test-Path -LiteralPath $oldKey) {
     Remove-Item -LiteralPath $oldKey -Recurse -Force
@@ -55,31 +58,25 @@ foreach ($oldKey in $oldKeys) {
 $items = @(
   @{ Key = '01CompressCopy'; Label = 'Сжать PNG как копию'; Args = '--auto --mode copy --preset balanced "%1"' },
   @{ Key = '02CompressReplace'; Label = 'Сжать PNG и заменить'; Args = '--auto --mode replace --preset balanced "%1"' },
-  @{ Key = '03Settings'; Label = 'Настройки'; Args = '"%1"'; Separator = $true }
+  @{ Key = '03Settings'; Label = 'Настройки'; Args = '"%1"' }
 )
 
-foreach ($baseReg in $baseRegs) {
-  & reg.exe add $baseReg /ve /d '' /f | Out-Null
-  & reg.exe add $baseReg /v MUIVerb /d 'Сжать PNG' /f | Out-Null
-  & reg.exe add $baseReg /v Icon /d $iconValue /f | Out-Null
-  & reg.exe delete "$baseReg\shell" /f 2>$null | Out-Null
-  & reg.exe delete "$baseReg\ExtendedSubCommandsKey" /f 2>$null | Out-Null
-  & reg.exe delete $baseReg /v AppliesTo /f 2>$null | Out-Null
-  & reg.exe delete $baseReg /v SubCommands /f 2>$null | Out-Null
-  & reg.exe delete $baseReg /v ExtendedSubCommandsKey /f 2>$null | Out-Null
-  & reg.exe delete "$baseReg\command" /f 2>$null | Out-Null
+& reg.exe add $baseReg /f | Out-Null
+& reg.exe add $baseReg /v MUIVerb /d 'Сжать PNG' /f | Out-Null
+& reg.exe add $baseReg /v Icon /d $iconValue /f | Out-Null
+& reg.exe add $baseReg /v SubCommands /d '' /f | Out-Null
+& reg.exe delete $baseReg /v AppliesTo /f 2>$null | Out-Null
+& reg.exe delete $baseReg /v ExtendedSubCommandsKey /f 2>$null | Out-Null
+& reg.exe delete "$baseReg\ExtendedSubCommandsKey" /f 2>$null | Out-Null
+& reg.exe delete "$baseReg\command" /f 2>$null | Out-Null
 
-  foreach ($item in $items) {
-    $itemKey = "$baseReg\ExtendedSubCommandsKey\Shell\$($item.Key)"
-    $command = "$itemKey\command"
-    & reg.exe add $itemKey /ve /d $item.Label /f | Out-Null
-    & reg.exe add $itemKey /v MUIVerb /d $item.Label /f | Out-Null
-    & reg.exe add $itemKey /v Icon /d $iconValue /f | Out-Null
-    if ($item.Separator) {
-      & reg.exe add $itemKey /v CommandFlags /t REG_DWORD /d 32 /f | Out-Null
-    }
-    & reg.exe add $command /ve /d ('"{0}" {1}' -f $installedExe, $item.Args) /f | Out-Null
-  }
+foreach ($item in $items) {
+  $itemKey = "$baseReg\Shell\$($item.Key)"
+  $command = "$itemKey\command"
+  & reg.exe add $itemKey /f | Out-Null
+  & reg.exe add $itemKey /v MUIVerb /d $item.Label /f | Out-Null
+  & reg.exe add $itemKey /v Icon /d $iconValue /f | Out-Null
+  & reg.exe add $command /ve /d ('"{0}" {1}' -f $installedExe, $item.Args) /f | Out-Null
 }
 
 Write-Host "Installed to: $InstallDir"

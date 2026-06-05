@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $keys = @(
   'Registry::HKEY_CURRENT_USER\Software\Classes\*\shell\PngQuantContext',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext',
+  'HKCU:\Software\Classes\pngfile\shell\PngQuantContext',
   'HKCU:\Software\Classes\PngQuantContext.Submenu',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressCopy',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressReplace',
@@ -18,6 +19,11 @@ $keys = @(
   'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.ReplaceQuality',
   'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.OpenSettings'
 )
+
+$userChoice = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.png\UserChoice' -ErrorAction SilentlyContinue
+if ($userChoice -and $userChoice.ProgId) {
+  $keys += "Registry::HKEY_CURRENT_USER\Software\Classes\$($userChoice.ProgId)\shell\PngQuantContext"
+}
 
 foreach ($key in $keys) {
   if (Test-Path -LiteralPath $key) {

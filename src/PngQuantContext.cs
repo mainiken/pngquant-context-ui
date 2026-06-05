@@ -219,13 +219,13 @@ internal static class PngQuantContext
         private bool _runNoDither;
         private string _runSpeed = "3";
 
-        private readonly RunOptions _options;
+        private readonly bool _autoRun;
 
         public MainForm(string pngquant, List<string> files, RunOptions options)
         {
             _pngquant = pngquant;
             _files = files;
-            _options = options;
+            _autoRun = options.AutoRun;
 
             Text = "Сжать PNG";
             StartPosition = FormStartPosition.CenterScreen;
@@ -351,7 +351,7 @@ internal static class PngQuantContext
             Controls.Add(_startButton);
             Controls.Add(_closeButton);
 
-            if (options.AutoRun)
+            if (_autoRun)
             {
                 Shown += delegate { StartCompression(); };
             }
@@ -496,6 +496,18 @@ internal static class PngQuantContext
                 _startButton.Enabled = true;
                 _closeButton.Enabled = true;
                 _closeButton.Focus();
+
+                if (_autoRun && failed == 0)
+                {
+                    var timer = new System.Windows.Forms.Timer { Interval = 900 };
+                    timer.Tick += delegate
+                    {
+                        timer.Stop();
+                        timer.Dispose();
+                        Close();
+                    };
+                    timer.Start();
+                }
             });
         }
 

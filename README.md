@@ -76,17 +76,16 @@ The installer writes only to `HKCU`, so administrator rights are not required.
 
 ## Manual Registry
 
-The installer creates the menu under `*\\shell` and filters it to PNG files:
+The installer creates the menu at the PNG extension association level, independent of the default PNG viewer:
 
 ```text
 HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext
-HKCU\Software\Classes\pngfile\shell\PngQuantContext
 ```
 
 Preset commands are nested under:
 
 ```text
-HKCU\Software\Classes\*\shell\PngQuantContext\ExtendedSubCommandsKey\Shell
+HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell
 ```
 
 ## Notes
