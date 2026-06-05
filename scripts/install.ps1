@@ -55,6 +55,10 @@ foreach ($staleValue in @('SubCommands', 'ExtendedSubCommandsKey')) {
   Remove-ItemProperty -Path $base -Name $staleValue -Force -ErrorAction SilentlyContinue
 }
 
+$baseCommand = Join-Path $base 'command'
+New-Item -Path $baseCommand -Force | Out-Null
+Set-ItemProperty -Path $baseCommand -Name '(default)' -Value ('"{0}" "%1"' -f $installedExe)
+
 $items = @(
   @{ Key = '01CopyBalanced'; Label = 'Копия - Balanced'; Args = '--auto --mode copy --preset balanced "%1"' },
   @{ Key = '02CopyQuality'; Label = 'Копия - Best quality'; Args = '--auto --mode copy --preset quality "%1"' },
