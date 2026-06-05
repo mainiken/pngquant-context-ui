@@ -8,9 +8,15 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $dist = Join-Path $root 'dist'
 $exeSource = Join-Path $dist 'PngQuantContext.exe'
+$packageExeSource = Join-Path $root 'PngQuantContext.exe'
+
+if (-not (Test-Path -LiteralPath $exeSource) -and (Test-Path -LiteralPath $packageExeSource)) {
+  $exeSource = $packageExeSource
+}
 
 if (-not (Test-Path -LiteralPath $exeSource)) {
   & (Join-Path $root 'scripts\build.ps1') | Out-Null
+  $exeSource = Join-Path $dist 'PngQuantContext.exe'
 }
 
 New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
