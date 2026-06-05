@@ -15,8 +15,19 @@ jobs:
         shell: pwsh
         run: ./scripts/build.ps1
 
+      - name: Setup .NET for WiX
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Build MSI
+        shell: pwsh
+        run: ./scripts/build-msi.ps1
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: PngQuantContext
-          path: dist/PngQuantContext.exe
+          path: |
+            dist/PngQuantContext.exe
+            dist/PngQuantContextSetup-*.msi

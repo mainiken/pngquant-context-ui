@@ -1,0 +1,93 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="PngQuant Context UI"
+    Manufacturer="mainiken"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="CD0F3A8F-4D54-42DB-889E-9977E1A13152"
+    Scope="perUser">
+
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of PngQuant Context UI is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/mainiken/pngquant-context-ui" />
+    <Property Id="ARPCOMMENTS" Value="Explorer context menu UI for pngquant." />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+    <Icon Id="ProductIcon" SourceFile="$(var.SourceRoot)\assets\PngQuantContext.ico" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="PngQuantContext">
+        <Directory Id="PNGQUANTFOLDER" Name="pngquant" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="PngQuant Context UI" Level="1">
+      <ComponentRef Id="AppExecutable" />
+      <ComponentRef Id="AppIcon" />
+      <ComponentRef Id="ShellMenuRegistry" />
+      <ComponentRef Id="RuntimeCleanup" />
+    </Feature>
+
+    <Component Id="AppExecutable" Directory="INSTALLFOLDER" Guid="A9F74C58-0811-4E31-A8E3-AF81E5EA8CD2">
+      <File Id="PngQuantContextExe" Source="$(var.DistDir)\PngQuantContext.exe" />
+      <RegistryValue Root="HKCU" Key="Software\mainiken\PngQuantContext\Components" Name="AppExecutable" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="AppIcon" Directory="INSTALLFOLDER" Guid="921B2497-60B6-4BD2-BE3E-CDEC9586B590">
+      <File Id="PngQuantContextIcon" Source="$(var.SourceRoot)\assets\PngQuantContext.ico" />
+      <RegistryValue Root="HKCU" Key="Software\mainiken\PngQuantContext\Components" Name="AppIcon" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Component Id="ShellMenuRegistry" Directory="INSTALLFOLDER" Guid="2B1DEF30-9082-481A-94D1-6F16CA3BB9CD">
+      <RegistryValue Root="HKCU" Key="Software\mainiken\PngQuantContext" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+
+      <RemoveRegistryKey Id="RemoveCurrentMenuOnInstall" Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveCurrentMenuOnUninstall" Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext" Action="removeOnUninstall" />
+      <RemoveRegistryKey Id="RemoveOldAllFilesMenu" Root="HKCU" Key="Software\Classes\*\shell\PngQuantContext" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldPngFileMenu" Root="HKCU" Key="Software\Classes\pngfile\shell\PngQuantContext" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldSubmenuClass" Root="HKCU" Key="Software\Classes\PngQuantContext.Submenu" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldCopyCommandStoreBalanced" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.CopyBalanced" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldCopyCommandStoreQuality" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.CopyQuality" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldCopyCommandStoreFast" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.CopyFast" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldReplaceCommandStoreBalanced" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.ReplaceBalanced" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldReplaceCommandStoreQuality" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.ReplaceQuality" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldSettingsCommandStore" Root="HKCU" Key="Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.OpenSettings" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldFlatCopyMenu" Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressCopy" Action="removeOnInstall" />
+      <RemoveRegistryKey Id="RemoveOldFlatReplaceMenu" Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressReplace" Action="removeOnInstall" />
+
+      <RegistryKey Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext">
+        <RegistryValue Name="MUIVerb" Type="string" Value="Compress PNG" />
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]PngQuantContext.ico" />
+        <RegistryValue Name="SubCommands" Type="string" Value="" />
+      </RegistryKey>
+
+      <RegistryKey Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell\01CompressCopy">
+        <RegistryValue Name="MUIVerb" Type="string" Value="Compress PNG as copy" />
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]PngQuantContext.ico" />
+      </RegistryKey>
+      <RegistryValue Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell\01CompressCopy\command" Type="string" Value="&quot;[INSTALLFOLDER]PngQuantContext.exe&quot; --auto --mode copy --preset balanced &quot;%1&quot;" />
+
+      <RegistryKey Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell\02CompressReplace">
+        <RegistryValue Name="MUIVerb" Type="string" Value="Compress PNG and replace" />
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]PngQuantContext.ico" />
+      </RegistryKey>
+      <RegistryValue Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell\02CompressReplace\command" Type="string" Value="&quot;[INSTALLFOLDER]PngQuantContext.exe&quot; --auto --mode replace --preset balanced &quot;%1&quot;" />
+
+      <RegistryKey Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell\03Settings">
+        <RegistryValue Name="MUIVerb" Type="string" Value="Settings" />
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]PngQuantContext.ico" />
+      </RegistryKey>
+      <RegistryValue Root="HKCU" Key="Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell\03Settings\command" Type="string" Value="&quot;[INSTALLFOLDER]PngQuantContext.exe&quot; &quot;%1&quot;" />
+    </Component>
+
+    <Component Id="RuntimeCleanup" Directory="INSTALLFOLDER" Guid="DABC75A9-B2F6-4662-B538-961183C44CFD">
+      <RegistryValue Root="HKCU" Key="Software\mainiken\PngQuantContext" Name="Cleanup" Type="integer" Value="1" KeyPath="yes" />
+      <RemoveFile Id="RemoveSettingsIni" Directory="INSTALLFOLDER" Name="settings.ini" On="uninstall" />
+      <RemoveFile Id="RemoveAppLog" Directory="INSTALLFOLDER" Name="PngQuantContext.log" On="uninstall" />
+      <RemoveFile Id="RemoveDownloadedPngQuantFiles" Directory="PNGQUANTFOLDER" Name="*" On="uninstall" />
+      <RemoveFolder Id="RemovePngQuantFolder" Directory="PNGQUANTFOLDER" On="uninstall" />
+      <RemoveFolder Id="RemoveInstallFolder" Directory="INSTALLFOLDER" On="uninstall" />
+      <RemoveRegistryKey Id="RemoveAppSettingsKey" Root="HKCU" Key="Software\mainiken\PngQuantContext" Action="removeOnUninstall" />
+    </Component>
+  </Package>
+</Wix>

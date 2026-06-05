@@ -83,19 +83,21 @@ Compress PNG
 - Рекомендуемая и проверенная среда: Windows 11 с классическим/legacy контекстным меню Explorer.
 - Другие версии Windows и сторонние shell-расширения не проверялись.
 - `.NET Framework 4.x`.
-- `pngquant.exe` рядом с приложением:
+- `pngquant.exe` рядом с приложением после установки:
   - `pngquant.exe`
   - `pngquant\pngquant.exe`
 
 Если `pngquant.exe` не найден, приложение не показывает жесткую ошибку. Вместо этого оно предлагает скачать официальный архив Windows с <https://pngquant.org/pngquant-windows.zip>.
 
-`pngquant` распространяется отдельно от этой UI-оболочки. Для публичных релизов включайте `pngquant.exe` в архив только если условия его лицензии это позволяют.
+Публичный MSI не включает `pngquant.exe`. `pngquant` распространяется отдельно от этой UI-оболочки. Для публичных релизов включайте `pngquant.exe` в архив только если условия его лицензии это позволяют.
+
+Текущий релиз не подписан. Windows SmartScreen все еще может показать предупреждение при первом запуске, пока приложение не будет подписано и не наберет репутацию.
 
 [Наверх](#pngquant-context-ui)
 
 ## Сборка
 
-Запуск из PowerShell:
+Сборка приложения из PowerShell:
 
 ```powershell
 .\scripts\build.ps1
@@ -113,9 +115,39 @@ dist\PngQuantContext.exe
 .\scripts\build.ps1 -PngQuantPath "C:\Tools\pngquant\pngquant.exe"
 ```
 
+Сборка MSI-установщика:
+
+```powershell
+.\scripts\build-msi.ps1
+```
+
+Результат MSI:
+
+```text
+dist\PngQuantContextSetup-0.4.0.msi
+```
+
+`build-msi.ps1` при первом запуске скачивает закрепленную версию WiX Toolset в `.tools\`. Папка `.tools\` игнорируется git. Для WiX 5.0.2 на build-машине нужен .NET 6 runtime.
+
 [Наверх](#pngquant-context-ui)
 
 ## Установка
+
+Рекомендуемая публичная установка:
+
+1. Скачайте `PngQuantContextSetup-0.4.0.msi` из последнего GitHub release.
+2. Откройте MSI и завершите установку.
+3. Нажмите правой кнопкой по PNG-файлу в классическом контекстном меню Explorer и выберите `Compress PNG`.
+
+Путь установки по умолчанию:
+
+```text
+%LOCALAPPDATA%\PngQuantContext
+```
+
+MSI устанавливается per-user, пишет shell-menu в `HKCU` и не требует прав администратора.
+
+Ручная/dev установка тоже остается:
 
 ```powershell
 .\scripts\install.ps1
@@ -127,17 +159,23 @@ dist\PngQuantContext.exe
 .\scripts\install.ps1 -PngQuantPath "C:\Tools\pngquant\pngquant.exe"
 ```
 
-Путь установки по умолчанию:
-
-```text
-%LOCALAPPDATA%\PngQuantContext
-```
-
-Installer пишет только в `HKCU`, поэтому права администратора не нужны.
-
 [Наверх](#pngquant-context-ui)
 
 ## Удаление
+
+Через Windows Settings:
+
+```text
+Settings -> Apps -> Installed apps -> PngQuant Context UI -> Uninstall
+```
+
+Или удалить MSI из PowerShell:
+
+```powershell
+msiexec /x dist\PngQuantContextSetup-0.4.0.msi
+```
+
+Ручное/dev удаление:
 
 ```powershell
 .\scripts\uninstall.ps1

@@ -83,19 +83,21 @@ Settings are available from the `...` button:
 - Recommended and tested environment: Windows 11 with the classic/legacy Explorer context menu.
 - Other Windows versions and third-party shell extensions have not been tested.
 - `.NET Framework 4.x`.
-- `pngquant.exe` next to the app:
+- `pngquant.exe` next to the app after installation:
   - `pngquant.exe`
   - `pngquant\pngquant.exe`
 
 If `pngquant.exe` is not found, the app does not show a hard error. Instead, it offers to download the official Windows archive from <https://pngquant.org/pngquant-windows.zip>.
 
-`pngquant` is distributed separately from this UI wrapper. Include `pngquant.exe` in public builds only when its license allows it.
+The public MSI does not bundle `pngquant.exe`. `pngquant` is distributed separately from this UI wrapper. Include `pngquant.exe` in public builds only when its license allows it.
+
+The current release is unsigned. Windows SmartScreen can still warn on first launch until the app is code-signed and gains reputation.
 
 [Back to top](#pngquant-context-ui)
 
 ## Build
 
-Run from PowerShell:
+Build the app from PowerShell:
 
 ```powershell
 .\scripts\build.ps1
@@ -113,9 +115,39 @@ Build and copy a local `pngquant.exe` into `dist`:
 .\scripts\build.ps1 -PngQuantPath "C:\Tools\pngquant\pngquant.exe"
 ```
 
+Build the MSI installer:
+
+```powershell
+.\scripts\build-msi.ps1
+```
+
+MSI output:
+
+```text
+dist\PngQuantContextSetup-0.4.0.msi
+```
+
+`build-msi.ps1` downloads a pinned WiX Toolset package into `.tools\` on first run. `.tools\` is ignored by git. WiX 5.0.2 requires the .NET 6 runtime on the build machine.
+
 [Back to top](#pngquant-context-ui)
 
 ## Install
+
+Recommended public install:
+
+1. Download `PngQuantContextSetup-0.4.0.msi` from the latest GitHub release.
+2. Open the MSI and complete installation.
+3. Right-click a PNG file in the classic Explorer context menu and use `Compress PNG`.
+
+Default install path:
+
+```text
+%LOCALAPPDATA%\PngQuantContext
+```
+
+The MSI installs per-user, writes the shell menu to `HKCU`, and does not require administrator rights.
+
+Manual/dev install is still available:
 
 ```powershell
 .\scripts\install.ps1
@@ -127,17 +159,23 @@ If `dist\pngquant\pngquant.exe` is missing, pass a local `pngquant.exe` path:
 .\scripts\install.ps1 -PngQuantPath "C:\Tools\pngquant\pngquant.exe"
 ```
 
-Default install path:
-
-```text
-%LOCALAPPDATA%\PngQuantContext
-```
-
-The installer writes only to `HKCU`, so administrator rights are not required.
-
 [Back to top](#pngquant-context-ui)
 
 ## Uninstall
+
+Use Windows Settings:
+
+```text
+Settings -> Apps -> Installed apps -> PngQuant Context UI -> Uninstall
+```
+
+Or uninstall the MSI from PowerShell:
+
+```powershell
+msiexec /x dist\PngQuantContextSetup-0.4.0.msi
+```
+
+Manual/dev uninstall:
 
 ```powershell
 .\scripts\uninstall.ps1

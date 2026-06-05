@@ -7,3 +7,4 @@ dist/
 *.suo
 .vs/
 PROJECT_MEMORY.local.md
+.tools/
