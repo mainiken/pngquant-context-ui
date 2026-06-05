@@ -85,10 +85,10 @@ The installer creates a cascading menu under:
 HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext
 ```
 
-Submenu commands are registered under:
+Submenu commands are registered as nested `shell` verbs under:
 
 ```text
-HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.*
+HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\shell
 ```
 
 Quick preset commands look like this:

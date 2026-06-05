@@ -28,10 +28,15 @@ if (Test-Path -LiteralPath $distPngquant) {
 $installedExe = Join-Path $InstallDir 'PngQuantContext.exe'
 $iconValue = "$installedExe,0"
 $base = 'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext'
-$commandStore = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell'
 $oldKeys = @(
   $base,
   'HKCU:\Software\Classes\PngQuantContext.Submenu',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.CopyBalanced',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.CopyQuality',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.CopyFast',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.ReplaceBalanced',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.ReplaceQuality',
+  'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.OpenSettings',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressCopy',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressReplace'
 )
@@ -46,20 +51,21 @@ New-Item -Path $base -Force | Out-Null
 Set-ItemProperty -Path $base -Name 'MUIVerb' -Value 'Сжать PNG'
 Set-ItemProperty -Path $base -Name '(default)' -Value 'Сжать PNG'
 Set-ItemProperty -Path $base -Name 'Icon' -Value $iconValue
+foreach ($staleValue in @('SubCommands', 'ExtendedSubCommandsKey')) {
+  Remove-ItemProperty -Path $base -Name $staleValue -Force -ErrorAction SilentlyContinue
+}
 
 $items = @(
-  @{ Key = 'PngQuantContext.CopyBalanced'; Label = 'Копия - Balanced'; Args = '--auto --mode copy --preset balanced "%1"' },
-  @{ Key = 'PngQuantContext.CopyQuality'; Label = 'Копия - Best quality'; Args = '--auto --mode copy --preset quality "%1"' },
-  @{ Key = 'PngQuantContext.CopyFast'; Label = 'Копия - Fast'; Args = '--auto --mode copy --preset fast "%1"' },
-  @{ Key = 'PngQuantContext.ReplaceBalanced'; Label = 'Заменить - Balanced'; Args = '--auto --mode replace --preset balanced "%1"'; Separator = $true },
-  @{ Key = 'PngQuantContext.ReplaceQuality'; Label = 'Заменить - Best quality'; Args = '--auto --mode replace --preset quality "%1"' },
-  @{ Key = 'PngQuantContext.OpenSettings'; Label = 'Открыть настройки...'; Args = '"%1"'; Separator = $true }
+  @{ Key = '01CopyBalanced'; Label = 'Копия - Balanced'; Args = '--auto --mode copy --preset balanced "%1"' },
+  @{ Key = '02CopyQuality'; Label = 'Копия - Best quality'; Args = '--auto --mode copy --preset quality "%1"' },
+  @{ Key = '03CopyFast'; Label = 'Копия - Fast'; Args = '--auto --mode copy --preset fast "%1"' },
+  @{ Key = '04ReplaceBalanced'; Label = 'Заменить - Balanced'; Args = '--auto --mode replace --preset balanced "%1"'; Separator = $true },
+  @{ Key = '05ReplaceQuality'; Label = 'Заменить - Best quality'; Args = '--auto --mode replace --preset quality "%1"' },
+  @{ Key = '06OpenSettings'; Label = 'Открыть настройки...'; Args = '"%1"'; Separator = $true }
 )
 
-Set-ItemProperty -Path $base -Name 'SubCommands' -Value (($items | ForEach-Object { $_.Key }) -join ';')
-
 foreach ($item in $items) {
-  $itemKey = Join-Path $commandStore $item.Key
+  $itemKey = Join-Path $base ("shell\" + $item.Key)
   $command = Join-Path $itemKey 'command'
   New-Item -Path $itemKey -Force | Out-Null
   Set-ItemProperty -Path $itemKey -Name '(default)' -Value $item.Label
