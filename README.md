@@ -86,7 +86,7 @@ AppliesTo = System.FileExtension:=".png"
 Preset commands are nested under:
 
 ```text
-HKCU\Software\Classes\*\shell\PngQuantContext\shell
+HKCU\Software\Classes\*\shell\PngQuantContext\ExtendedSubCommandsKey\Shell
 ```
 
 ## Notes

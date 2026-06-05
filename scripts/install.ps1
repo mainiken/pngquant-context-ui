@@ -48,11 +48,13 @@ foreach ($oldKey in $oldKeys) {
   }
 }
 
-& reg.exe add $baseReg /ve /d 'Сжать PNG' /f | Out-Null
+& reg.exe add $baseReg /ve /d '' /f | Out-Null
 & reg.exe add $baseReg /v MUIVerb /d 'Сжать PNG' /f | Out-Null
 & reg.exe add $baseReg /v Icon /d $iconValue /f | Out-Null
 & reg.exe add $baseReg /v AppliesTo /d 'System.FileExtension:=".png"' /f | Out-Null
-& reg.exe add $baseReg /v SubCommands /d '' /f | Out-Null
+& reg.exe delete "$baseReg\shell" /f 2>$null | Out-Null
+& reg.exe delete "$baseReg\ExtendedSubCommandsKey" /f 2>$null | Out-Null
+& reg.exe delete $baseReg /v SubCommands /f 2>$null | Out-Null
 & reg.exe delete $baseReg /v ExtendedSubCommandsKey /f 2>$null | Out-Null
 & reg.exe delete "$baseReg\command" /f 2>$null | Out-Null
 
@@ -63,7 +65,7 @@ $items = @(
 )
 
 foreach ($item in $items) {
-  $itemKey = "$baseReg\shell\$($item.Key)"
+  $itemKey = "$baseReg\ExtendedSubCommandsKey\Shell\$($item.Key)"
   $command = "$itemKey\command"
   & reg.exe add $itemKey /ve /d $item.Label /f | Out-Null
   & reg.exe add $itemKey /v MUIVerb /d $item.Label /f | Out-Null
