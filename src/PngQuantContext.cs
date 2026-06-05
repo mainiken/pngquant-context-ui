@@ -15,7 +15,8 @@ internal static class PngQuantContext
     [STAThread]
     private static int Main(string[] args)
     {
-        var files = GetExistingFiles(args);
+        var options = ParseArguments(args);
+        var files = options.Files;
         Mutex instance = null;
 
         if (files.Count > 0)
@@ -52,7 +53,7 @@ internal static class PngQuantContext
             return 1;
         }
 
-        using (var form = new MainForm(pngquant, files))
+        using (var form = new MainForm(pngquant, files, options))
         {
             Application.Run(form);
         }
@@ -65,20 +66,48 @@ internal static class PngQuantContext
         return 0;
     }
 
-    private static List<string> GetExistingFiles(string[] args)
+    private static RunOptions ParseArguments(string[] args)
     {
-        var files = new List<string>();
+        var options = new RunOptions();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var arg in args)
+        for (var i = 0; i < args.Length; i++)
         {
+            var arg = args[i];
+            var lower = arg.ToLowerInvariant();
+
+            if (lower == "--auto")
+            {
+                options.AutoRun = true;
+                continue;
+            }
+
+            if (lower == "--nofs")
+            {
+                options.NoDither = true;
+                continue;
+            }
+
+            if (lower == "--mode" && i + 1 < args.Length)
+            {
+                var mode = args[++i].ToLowerInvariant();
+                options.Replace = mode == "replace";
+                continue;
+            }
+
+            if (lower == "--preset" && i + 1 < args.Length)
+            {
+                options.Preset = args[++i].ToLowerInvariant();
+                continue;
+            }
+
             if (File.Exists(arg) && seen.Add(arg))
             {
-                files.Add(arg);
+                options.Files.Add(arg);
             }
         }
 
-        return files;
+        return options;
     }
 
     private static string FindPngQuant()
@@ -164,6 +193,15 @@ internal static class PngQuantContext
         return Path.Combine(QueueDirectory, "files.txt");
     }
 
+    private sealed class RunOptions
+    {
+        public readonly List<string> Files = new List<string>();
+        public bool AutoRun;
+        public bool Replace;
+        public bool NoDither;
+        public string Preset = "balanced";
+    }
+
     private sealed class MainForm : Form
     {
         private readonly string _pngquant;
@@ -181,10 +219,13 @@ internal static class PngQuantContext
         private bool _runNoDither;
         private string _runSpeed = "3";
 
-        public MainForm(string pngquant, List<string> files)
+        private readonly RunOptions _options;
+
+        public MainForm(string pngquant, List<string> files, RunOptions options)
         {
             _pngquant = pngquant;
             _files = files;
+            _options = options;
 
             Text = "Сжать PNG";
             StartPosition = FormStartPosition.CenterScreen;
@@ -216,14 +257,15 @@ internal static class PngQuantContext
                 Location = new Point(104, 46),
                 Size = new Size(96, 22),
                 Text = "Копия",
-                Checked = true
+                Checked = !options.Replace
             };
 
             _replaceMode = new RadioButton
             {
                 Location = new Point(206, 46),
                 Size = new Size(96, 22),
-                Text = "Заменить"
+                Text = "Заменить",
+                Checked = options.Replace
             };
 
             var presetLabel = new Label
@@ -243,14 +285,14 @@ internal static class PngQuantContext
             _preset.Items.Add("Balanced (speed 3)");
             _preset.Items.Add("Best quality (speed 1)");
             _preset.Items.Add("Fast (speed 8)");
-            _preset.SelectedIndex = 0;
+            _preset.SelectedIndex = options.Preset == "quality" ? 1 : (options.Preset == "fast" ? 2 : 0);
 
             _noDither = new CheckBox
             {
                 Location = new Point(104, 110),
                 Size = new Size(230, 22),
                 Text = "Без dithering",
-                Checked = false
+                Checked = options.NoDither
             };
 
             _status = new Label
@@ -308,6 +350,11 @@ internal static class PngQuantContext
             Controls.Add(_details);
             Controls.Add(_startButton);
             Controls.Add(_closeButton);
+
+            if (options.AutoRun)
+            {
+                Shown += delegate { StartCompression(); };
+            }
         }
 
         private void StartCompression()

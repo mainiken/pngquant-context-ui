@@ -2,17 +2,22 @@
 
 Small Windows context-menu UI for compressing PNG files with `pngquant`.
 
-It adds one Explorer menu item:
+It adds one Explorer cascading menu:
 
 ```text
-Сжать PNG...
+Сжать PNG
 ```
 
-The app opens a compact UI where you choose:
+The submenu contains quick presets:
 
-- output mode: create `*-compressed.png` copies or replace source files;
-- preset: balanced, best quality, or fast;
-- optional no-dithering mode.
+- `Копия - Balanced`
+- `Копия - Best quality`
+- `Копия - Fast`
+- `Заменить - Balanced`
+- `Заменить - Best quality`
+- `Открыть настройки...`
+
+Quick presets start compression immediately. `Открыть настройки...` opens a compact UI where you can choose output mode, preset, and optional no-dithering mode.
 
 When several PNG files are selected, Windows may launch the menu command once per file. The app merges those launches into one batch window automatically.
 
@@ -72,18 +77,24 @@ The installer writes only to `HKCU`, so administrator rights are not required.
 .\scripts\uninstall.ps1
 ```
 
-## Manual Registry Command
+## Manual Registry
 
-The installed context-menu command is:
-
-```text
-"%LOCALAPPDATA%\PngQuantContext\PngQuantContext.exe" "%1"
-```
-
-Registry key:
+The installer creates a cascading menu under:
 
 ```text
 HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext
+```
+
+Submenu commands are registered under:
+
+```text
+HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\CommandStore\shell\PngQuantContext.*
+```
+
+Quick preset commands look like this:
+
+```text
+"%LOCALAPPDATA%\PngQuantContext\PngQuantContext.exe" --auto --mode copy --preset balanced "%1"
 ```
 
 ## Notes

@@ -7,6 +7,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $src = Join-Path $root 'src\PngQuantContext.cs'
+$icon = Join-Path $root 'assets\PngQuantContext.ico'
 $dist = Join-Path $root 'dist'
 $out = Join-Path $dist 'PngQuantContext.exe'
 
@@ -22,7 +23,12 @@ if (-not $csc) {
   throw 'csc.exe not found. Install .NET Framework Developer Pack or build on Windows with .NET Framework 4.x.'
 }
 
-& $csc /nologo /target:winexe /codepage:65001 /out:$out $src /reference:System.Windows.Forms.dll /reference:System.Drawing.dll
+$win32Icon = @()
+if (Test-Path -LiteralPath $icon) {
+  $win32Icon = @('/win32icon:' + $icon)
+}
+
+& $csc /nologo /target:winexe /codepage:65001 /out:$out @win32Icon $src /reference:System.Windows.Forms.dll /reference:System.Drawing.dll
 if ($LASTEXITCODE -ne 0) {
   exit $LASTEXITCODE
 }
