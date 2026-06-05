@@ -79,8 +79,8 @@ The installer writes only to `HKCU`, so administrator rights are not required.
 The installer creates the menu under `*\\shell` and filters it to PNG files:
 
 ```text
-HKCU\Software\Classes\*\shell\PngQuantContext
-AppliesTo = System.FileExtension:=".png"
+HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext
+HKCU\Software\Classes\pngfile\shell\PngQuantContext
 ```
 
 Preset commands are nested under:
