@@ -215,7 +215,6 @@ internal static class PngQuantContext
         private readonly ProgressBar _progress;
         private readonly Button _startButton;
         private readonly Button _closeButton;
-        private readonly bool _compactMenu;
         private bool _runReplace;
         private bool _runNoDither;
         private string _runSpeed = "3";
@@ -227,7 +226,6 @@ internal static class PngQuantContext
             _pngquant = pngquant;
             _files = files;
             _options = options;
-            _compactMenu = !options.AutoRun;
 
             Text = "Сжать PNG";
             StartPosition = FormStartPosition.CenterScreen;
@@ -357,62 +355,6 @@ internal static class PngQuantContext
             {
                 Shown += delegate { StartCompression(); };
             }
-            else
-            {
-                Shown += delegate { ShowCompactMenu(); };
-            }
-        }
-
-        private void ShowCompactMenu()
-        {
-            Hide();
-
-            var menu = new ContextMenuStrip();
-            menu.Items.Add(MakeMenuItem("Копия - Balanced", false, "balanced", false));
-            menu.Items.Add(MakeMenuItem("Копия - Best quality", false, "quality", false));
-            menu.Items.Add(MakeMenuItem("Копия - Fast", false, "fast", false));
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add(MakeMenuItem("Заменить - Balanced", true, "balanced", false));
-            menu.Items.Add(MakeMenuItem("Заменить - Best quality", true, "quality", false));
-            menu.Items.Add(new ToolStripSeparator());
-
-            var settings = new ToolStripMenuItem("Открыть настройки...");
-            settings.Click += delegate
-            {
-                Show();
-                Activate();
-            };
-            menu.Items.Add(settings);
-
-            menu.Closed += delegate
-            {
-                if (!Visible && !_startButton.Enabled)
-                {
-                    Show();
-                }
-                else if (!Visible)
-                {
-                    Close();
-                }
-            };
-
-            menu.Show(Cursor.Position);
-        }
-
-        private ToolStripMenuItem MakeMenuItem(string label, bool replace, string preset, bool noDither)
-        {
-            var item = new ToolStripMenuItem(label);
-            item.Click += delegate
-            {
-                _copyMode.Checked = !replace;
-                _replaceMode.Checked = replace;
-                _preset.SelectedIndex = preset == "quality" ? 1 : (preset == "fast" ? 2 : 0);
-                _noDither.Checked = noDither;
-                Show();
-                Activate();
-                StartCompression();
-            };
-            return item;
         }
 
         private void StartCompression()

@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $keys = @(
+  'Registry::HKEY_CURRENT_USER\Software\Classes\*\shell\PngQuantContext',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext',
   'HKCU:\Software\Classes\PngQuantContext.Submenu',
   'HKCU:\Software\Classes\SystemFileAssociations\.png\shell\PngquantCompressCopy',
