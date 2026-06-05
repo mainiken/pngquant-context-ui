@@ -20,6 +20,18 @@ The first two commands start compression immediately with the balanced preset. `
 
 When several PNG files are selected, Windows may launch the menu command once per file. The app merges those launches into one batch window automatically.
 
+## UI
+
+The compression window shows a per-file queue:
+
+- file name;
+- input size;
+- output size;
+- saved size;
+- current status.
+
+The progress bar tracks completed files in the queue. `pngquant` does not expose percentage progress inside a single file, so the UI does not fake per-file percentages. The `Cancel` button stops the current `pngquant` process and marks the remaining queued files as cancelled.
+
 ## Requirements and Compatibility
 
 - Recommended and tested target: Windows 11 with the classic/legacy Explorer context menu.
@@ -95,6 +107,5 @@ HKCU\Software\Classes\SystemFileAssociations\.png\shell\PngQuantContext\Shell
 
 ## Notes
 
-- `pngquant` does not expose per-file progress, so the UI shows an indeterminate progress bar while the current file is being processed.
 - Compression failures are logged to `PngQuantContext.log` next to the app.
 - Copy mode writes `image-compressed.png` beside `image.png`.

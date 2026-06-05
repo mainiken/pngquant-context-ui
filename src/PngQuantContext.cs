@@ -431,65 +431,101 @@ internal static class PngQuantContext
     private sealed class MainForm : Form
     {
         private readonly string _pngquant;
-        private readonly List<string> _files;
+        private readonly List<FileJob> _jobs = new List<FileJob>();
         private readonly ComboBox _preset;
         private readonly RadioButton _copyMode;
         private readonly RadioButton _replaceMode;
         private readonly CheckBox _noDither;
-        private readonly Label _status;
+        private readonly Label _summary;
+        private readonly Label _current;
         private readonly Label _details;
-        private readonly ProgressBar _progress;
+        private readonly ProgressBar _overallProgress;
+        private readonly ListView _fileList;
         private readonly Button _startButton;
+        private readonly Button _cancelButton;
         private readonly Button _closeButton;
+        private readonly object _processLock = new object();
+        private readonly bool _autoRun;
+        private volatile bool _cancelRequested;
+        private Process _currentProcess;
+        private bool _running;
         private bool _runReplace;
         private bool _runNoDither;
         private string _runSpeed = "3";
 
-        private readonly bool _autoRun;
-
         public MainForm(string pngquant, List<string> files, RunOptions options)
         {
             _pngquant = pngquant;
-            _files = files;
             _autoRun = options.AutoRun;
 
-            Text = "Compress PNG";
+            foreach (var file in files)
+            {
+                _jobs.Add(new FileJob(file));
+            }
+
+            Text = "PngQuant Context UI";
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ClientSize = new Size(460, 260);
+            MinimumSize = new Size(760, 500);
+            ClientSize = new Size(820, 540);
             Font = new Font("Segoe UI", 9);
+            BackColor = Color.FromArgb(246, 248, 250);
+
+            var header = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 78,
+                BackColor = Color.FromArgb(31, 41, 55)
+            };
 
             var title = new Label
             {
                 AutoSize = false,
-                Location = new Point(18, 14),
-                Size = new Size(424, 24),
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                Text = "PNG files: " + files.Count
+                Location = new Point(20, 15),
+                Size = new Size(500, 26),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = Color.White,
+                Text = "Compress PNG files"
+            };
+
+            _summary = new Label
+            {
+                AutoSize = false,
+                Location = new Point(20, 43),
+                Size = new Size(760, 22),
+                ForeColor = Color.FromArgb(209, 213, 219),
+                Text = BuildReadySummary()
+            };
+
+            header.Controls.Add(title);
+            header.Controls.Add(_summary);
+
+            var optionsPanel = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 86,
+                BackColor = Color.White
             };
 
             var modeLabel = new Label
             {
                 AutoSize = false,
-                Location = new Point(18, 48),
-                Size = new Size(80, 20),
+                Location = new Point(20, 17),
+                Size = new Size(72, 22),
                 Text = "Mode"
             };
 
             _copyMode = new RadioButton
             {
-                Location = new Point(104, 46),
-                Size = new Size(96, 22),
+                Location = new Point(96, 15),
+                Size = new Size(75, 24),
                 Text = "Copy",
                 Checked = !options.Replace
             };
 
             _replaceMode = new RadioButton
             {
-                Location = new Point(206, 46),
-                Size = new Size(96, 22),
+                Location = new Point(174, 15),
+                Size = new Size(90, 24),
                 Text = "Replace",
                 Checked = options.Replace
             };
@@ -497,15 +533,15 @@ internal static class PngQuantContext
             var presetLabel = new Label
             {
                 AutoSize = false,
-                Location = new Point(18, 82),
-                Size = new Size(80, 20),
+                Location = new Point(20, 49),
+                Size = new Size(72, 22),
                 Text = "Preset"
             };
 
             _preset = new ComboBox
             {
-                Location = new Point(104, 78),
-                Size = new Size(242, 24),
+                Location = new Point(96, 46),
+                Size = new Size(220, 24),
                 DropDownStyle = ComboBoxStyle.DropDownList
             };
             _preset.Items.Add("Balanced (speed 3)");
@@ -515,89 +551,184 @@ internal static class PngQuantContext
 
             _noDither = new CheckBox
             {
-                Location = new Point(104, 110),
-                Size = new Size(230, 22),
+                Location = new Point(340, 47),
+                Size = new Size(150, 24),
                 Text = "Disable dithering",
                 Checked = options.NoDither
             };
 
-            _status = new Label
+            _startButton = new Button
             {
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(514, 24),
+                Size = new Size(92, 30),
+                Text = "Compress"
+            };
+            _startButton.Click += delegate { StartCompression(); };
+
+            _cancelButton = new Button
+            {
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(612, 24),
+                Size = new Size(82, 30),
+                Text = "Cancel",
+                Enabled = false
+            };
+            _cancelButton.Click += delegate { CancelCompression(); };
+
+            _closeButton = new Button
+            {
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(700, 24),
+                Size = new Size(82, 30),
+                Text = "Close"
+            };
+            _closeButton.Click += delegate { Close(); };
+
+            optionsPanel.Controls.Add(modeLabel);
+            optionsPanel.Controls.Add(_copyMode);
+            optionsPanel.Controls.Add(_replaceMode);
+            optionsPanel.Controls.Add(presetLabel);
+            optionsPanel.Controls.Add(_preset);
+            optionsPanel.Controls.Add(_noDither);
+            optionsPanel.Controls.Add(_startButton);
+            optionsPanel.Controls.Add(_cancelButton);
+            optionsPanel.Controls.Add(_closeButton);
+
+            _fileList = new ListView
+            {
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                Location = new Point(18, 180),
+                Size = new Size(784, 275),
+                View = View.Details,
+                FullRowSelect = true,
+                GridLines = false,
+                HideSelection = false,
+                ShowItemToolTips = true,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.White
+            };
+            _fileList.Columns.Add("File", 320);
+            _fileList.Columns.Add("Before", 95, HorizontalAlignment.Right);
+            _fileList.Columns.Add("After", 95, HorizontalAlignment.Right);
+            _fileList.Columns.Add("Saved", 95, HorizontalAlignment.Right);
+            _fileList.Columns.Add("Status", 170);
+
+            foreach (var job in _jobs)
+            {
+                _fileList.Items.Add(CreateListItem(job));
+            }
+
+            _current = new Label
+            {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 AutoSize = false,
-                Location = new Point(18, 145),
-                Size = new Size(424, 34),
-                Text = "Ready to compress."
+                Location = new Point(18, 464),
+                Size = new Size(784, 22),
+                Text = "Ready."
             };
 
-            _progress = new ProgressBar
+            _overallProgress = new ProgressBar
             {
-                Location = new Point(18, 184),
-                Size = new Size(424, 18),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                Location = new Point(18, 490),
+                Size = new Size(784, 18),
                 Minimum = 0,
-                Maximum = Math.Max(files.Count, 1),
+                Maximum = Math.Max(_jobs.Count, 1),
                 Value = 0,
                 Style = ProgressBarStyle.Continuous
             };
 
             _details = new Label
             {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 AutoSize = false,
-                Location = new Point(18, 212),
-                Size = new Size(260, 22),
-                ForeColor = Color.FromArgb(85, 85, 85),
-                Text = "pngquant: " + Path.GetFileName(_pngquant)
+                Location = new Point(18, 514),
+                Size = new Size(784, 20),
+                ForeColor = Color.FromArgb(95, 105, 117),
+                Text = "pngquant: " + _pngquant
             };
 
-            _startButton = new Button
-            {
-                Location = new Point(244, 224),
-                Size = new Size(96, 28),
-                Text = "Compress"
-            };
-            _startButton.Click += delegate { StartCompression(); };
-
-            _closeButton = new Button
-            {
-                Location = new Point(346, 224),
-                Size = new Size(96, 28),
-                Text = "Close"
-            };
-            _closeButton.Click += delegate { Close(); };
-
-            Controls.Add(title);
-            Controls.Add(modeLabel);
-            Controls.Add(_copyMode);
-            Controls.Add(_replaceMode);
-            Controls.Add(presetLabel);
-            Controls.Add(_preset);
-            Controls.Add(_noDither);
-            Controls.Add(_status);
-            Controls.Add(_progress);
             Controls.Add(_details);
-            Controls.Add(_startButton);
-            Controls.Add(_closeButton);
+            Controls.Add(_overallProgress);
+            Controls.Add(_current);
+            Controls.Add(_fileList);
+            Controls.Add(optionsPanel);
+            Controls.Add(header);
 
-            if (_autoRun)
+            Resize += delegate { ResizeColumns(); };
+            FormClosing += delegate(object sender, FormClosingEventArgs args)
             {
-                Shown += delegate { StartCompression(); };
-            }
+                if (_running)
+                {
+                    args.Cancel = true;
+                    CancelCompression();
+                }
+            };
+            Shown += delegate
+            {
+                ResizeColumns();
+                if (_autoRun)
+                {
+                    StartCompression();
+                }
+            };
         }
 
         private void StartCompression()
         {
+            if (_running)
+            {
+                return;
+            }
+
             _runReplace = _replaceMode.Checked;
             _runNoDither = _noDither.Checked;
             _runSpeed = _preset.SelectedIndex == 1 ? "1" : (_preset.SelectedIndex == 2 ? "8" : "3");
+            _cancelRequested = false;
+            _running = true;
 
-            _startButton.Enabled = false;
-            _closeButton.Enabled = false;
+            foreach (var job in _jobs)
+            {
+                job.AfterLength = -1;
+                job.SavedBytes = 0;
+                job.Status = "Queued";
+                job.Success = false;
+            }
+
+            RefreshAllRows();
+            SetControlsForRunning(true);
+            SetOverallProgress(0);
+            SetCurrent("Starting compression...");
+
             ThreadPool.QueueUserWorkItem(delegate { CompressFiles(); });
+        }
+
+        private void CancelCompression()
+        {
+            if (!_running)
+            {
+                return;
+            }
+
+            _cancelRequested = true;
+            SetCurrent("Cancelling...");
+            _cancelButton.Enabled = false;
+
+            lock (_processLock)
+            {
+                if (_currentProcess != null && !_currentProcess.HasExited)
+                {
+                    TryKill(_currentProcess);
+                }
+            }
         }
 
         private void CompressFiles()
         {
             var done = 0;
             var failed = 0;
+            var cancelled = false;
             var replace = _runReplace;
             var noDither = _runNoDither;
             var speed = _runSpeed;
@@ -610,64 +741,362 @@ internal static class PngQuantContext
             {
             }
 
-            for (var i = 0; i < _files.Count; i++)
+            for (var i = 0; i < _jobs.Count; i++)
             {
-                var file = _files[i];
-                var ext = replace ? ".png" : "-compressed.png";
-                var expectedOutput = replace
-                    ? file
-                    : Path.Combine(Path.GetDirectoryName(file), Path.GetFileNameWithoutExtension(file) + "-compressed.png");
-                var beforeLength = File.Exists(file) ? new FileInfo(file).Length : -1;
-                var arguments = BuildArguments(ext, speed, noDither, file);
-                var exitCode = -1;
-                var timedOut = false;
-
-                SetProgress(i, "Compressing: " + Path.GetFileName(file), (i + 1) + " of " + _files.Count, true);
-
-                using (var process = new Process())
+                if (_cancelRequested)
                 {
-                    process.StartInfo.FileName = _pngquant;
-                    process.StartInfo.Arguments = arguments;
-                    process.StartInfo.WorkingDirectory = Path.GetDirectoryName(file);
-                    process.StartInfo.UseShellExecute = false;
-                    process.StartInfo.CreateNoWindow = true;
-                    process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
-                    process.Start();
-
-                    if (!process.WaitForExit(120000))
-                    {
-                        timedOut = true;
-                        try
-                        {
-                            process.Kill();
-                        }
-                        catch
-                        {
-                        }
-                    }
-                    else
-                    {
-                        exitCode = process.ExitCode;
-                    }
+                    cancelled = true;
+                    MarkRemainingCancelled(i);
+                    break;
                 }
 
-                var afterLength = File.Exists(expectedOutput) ? new FileInfo(expectedOutput).Length : -1;
-                var success = exitCode == 0 && afterLength > 0 && (!replace || afterLength != beforeLength);
-                AppendLog(file, arguments, exitCode, timedOut, expectedOutput, beforeLength, afterLength);
+                var job = _jobs[i];
+                UpdateJob(i, "Processing...", null, null);
+                SetCurrent("Compressing " + (i + 1) + " of " + _jobs.Count + ": " + job.Name);
 
-                if (success)
+                var result = CompressOne(job, replace, speed, noDither);
+                AppendLog(job.Path, result.Arguments, result.ExitCode, result.TimedOut, result.OutputPath, job.BeforeLength, result.AfterLength);
+
+                if (result.Cancelled)
+                {
+                    cancelled = true;
+                    UpdateJob(i, "Cancelled", null, false);
+                    MarkRemainingCancelled(i + 1);
+                    break;
+                }
+
+                if (result.Success)
                 {
                     done++;
+                    UpdateJob(i, "Done", result.AfterLength, true);
                 }
                 else
                 {
                     failed++;
+                    UpdateJob(i, result.TimedOut ? "Timed out" : "Failed", result.AfterLength, false);
                 }
 
-                SetProgress(i + 1, null, null, false);
+                SetOverallProgress(i + 1);
             }
 
-            Finish(done, failed, replace);
+            Finish(done, failed, cancelled);
+        }
+
+        private CompressionResult CompressOne(FileJob job, bool replace, string speed, bool noDither)
+        {
+            var ext = replace ? ".png" : "-compressed.png";
+            var outputPath = replace
+                ? job.Path
+                : Path.Combine(Path.GetDirectoryName(job.Path), Path.GetFileNameWithoutExtension(job.Path) + "-compressed.png");
+            var arguments = BuildArguments(ext, speed, noDither, job.Path);
+            var result = new CompressionResult
+            {
+                Arguments = arguments,
+                OutputPath = outputPath,
+                ExitCode = -1,
+                AfterLength = -1
+            };
+
+            using (var process = new Process())
+            {
+                process.StartInfo.FileName = _pngquant;
+                process.StartInfo.Arguments = arguments;
+                process.StartInfo.WorkingDirectory = Path.GetDirectoryName(job.Path);
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.CreateNoWindow = true;
+                process.StartInfo.WindowStyle = ProcessWindowStyle.Hidden;
+
+                lock (_processLock)
+                {
+                    _currentProcess = process;
+                }
+
+                process.Start();
+                var started = DateTime.UtcNow;
+
+                while (!process.WaitForExit(200))
+                {
+                    if (_cancelRequested)
+                    {
+                        result.Cancelled = true;
+                        TryKill(process);
+                        break;
+                    }
+
+                    if ((DateTime.UtcNow - started).TotalMilliseconds > 120000)
+                    {
+                        result.TimedOut = true;
+                        TryKill(process);
+                        break;
+                    }
+                }
+
+                if (_cancelRequested)
+                {
+                    result.Cancelled = true;
+                }
+                else if (!result.TimedOut)
+                {
+                    result.ExitCode = process.ExitCode;
+                }
+
+                lock (_processLock)
+                {
+                    if (ReferenceEquals(_currentProcess, process))
+                    {
+                        _currentProcess = null;
+                    }
+                }
+            }
+
+            result.AfterLength = File.Exists(outputPath) ? new FileInfo(outputPath).Length : -1;
+            result.Success = !result.Cancelled && !result.TimedOut && result.ExitCode == 0 && result.AfterLength > 0;
+            return result;
+        }
+
+        private void Finish(int done, int failed, bool cancelled)
+        {
+            RunOnUi(delegate
+            {
+                _running = false;
+                SetControlsForRunning(false);
+                _overallProgress.Value = Math.Min(_overallProgress.Maximum, CountFinishedRows());
+
+                if (cancelled)
+                {
+                    _current.Text = "Cancelled. Completed " + done + " file(s).";
+                }
+                else if (failed == 0)
+                {
+                    _current.Text = "Done. Compressed " + done + " file(s).";
+                }
+                else
+                {
+                    _current.Text = "Done. Compressed " + done + ", failed " + failed + ".";
+                }
+
+                _details.Text = failed == 0
+                    ? "Total saved: " + FormatBytes(CalculateTotalSaved())
+                    : "Details: " + LogPath;
+                _closeButton.Focus();
+            });
+        }
+
+        private void SetControlsForRunning(bool running)
+        {
+            _copyMode.Enabled = !running;
+            _replaceMode.Enabled = !running;
+            _preset.Enabled = !running;
+            _noDither.Enabled = !running;
+            _startButton.Enabled = !running;
+            _cancelButton.Enabled = running;
+            _closeButton.Enabled = !running;
+        }
+
+        private void MarkRemainingCancelled(int startIndex)
+        {
+            for (var i = startIndex; i < _jobs.Count; i++)
+            {
+                UpdateJob(i, "Cancelled", null, false);
+            }
+        }
+
+        private void UpdateJob(int index, string status, long? afterLength, bool? success)
+        {
+            RunOnUi(delegate
+            {
+                var job = _jobs[index];
+                job.Status = status;
+
+                if (afterLength.HasValue)
+                {
+                    job.AfterLength = afterLength.Value;
+                    job.SavedBytes = Math.Max(0, job.BeforeLength - job.AfterLength);
+                }
+
+                if (success.HasValue)
+                {
+                    job.Success = success.Value;
+                }
+
+                var item = _fileList.Items[index];
+                item.SubItems[2].Text = FormatBytes(job.AfterLength);
+                item.SubItems[3].Text = job.AfterLength > 0 ? FormatBytes(job.SavedBytes) : "";
+                item.SubItems[4].Text = job.Status;
+                item.BackColor = GetStatusColor(job.Status);
+                _fileList.EnsureVisible(index);
+                _summary.Text = BuildProgressSummary();
+            });
+        }
+
+        private void RefreshAllRows()
+        {
+            for (var i = 0; i < _jobs.Count; i++)
+            {
+                var job = _jobs[i];
+                var item = _fileList.Items[i];
+                item.SubItems[2].Text = "";
+                item.SubItems[3].Text = "";
+                item.SubItems[4].Text = job.Status;
+                item.BackColor = Color.White;
+            }
+        }
+
+        private void SetOverallProgress(int value)
+        {
+            RunOnUi(delegate
+            {
+                _overallProgress.Value = Math.Min(Math.Max(value, _overallProgress.Minimum), _overallProgress.Maximum);
+            });
+        }
+
+        private void SetCurrent(string text)
+        {
+            RunOnUi(delegate { _current.Text = text; });
+        }
+
+        private int CountFinishedRows()
+        {
+            var count = 0;
+            foreach (var job in _jobs)
+            {
+                if (job.Status == "Done" || job.Status == "Failed" || job.Status == "Timed out" || job.Status == "Cancelled")
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        private long CalculateTotalSaved()
+        {
+            long saved = 0;
+            foreach (var job in _jobs)
+            {
+                saved += Math.Max(0, job.SavedBytes);
+            }
+
+            return saved;
+        }
+
+        private string BuildReadySummary()
+        {
+            return _jobs.Count + " file(s), total input " + FormatBytes(CalculateTotalInput());
+        }
+
+        private string BuildProgressSummary()
+        {
+            var done = 0;
+            var failed = 0;
+            foreach (var job in _jobs)
+            {
+                if (job.Status == "Done")
+                {
+                    done++;
+                }
+                else if (job.Status == "Failed" || job.Status == "Timed out")
+                {
+                    failed++;
+                }
+            }
+
+            return "Done " + done + " / " + _jobs.Count + (failed > 0 ? ", failed " + failed : "") + ", saved " + FormatBytes(CalculateTotalSaved());
+        }
+
+        private long CalculateTotalInput()
+        {
+            long total = 0;
+            foreach (var job in _jobs)
+            {
+                total += Math.Max(0, job.BeforeLength);
+            }
+
+            return total;
+        }
+
+        private ListViewItem CreateListItem(FileJob job)
+        {
+            var item = new ListViewItem(job.Name);
+            item.SubItems.Add(FormatBytes(job.BeforeLength));
+            item.SubItems.Add("");
+            item.SubItems.Add("");
+            item.SubItems.Add(job.Status);
+            item.ToolTipText = job.Path;
+            return item;
+        }
+
+        private void ResizeColumns()
+        {
+            if (_fileList.Columns.Count == 0)
+            {
+                return;
+            }
+
+            var fixedWidth = 95 + 95 + 95 + 170 + 8;
+            _fileList.Columns[0].Width = Math.Max(220, _fileList.ClientSize.Width - fixedWidth);
+        }
+
+        private void RunOnUi(MethodInvoker action)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (!IsDisposed)
+                    {
+                        action();
+                    }
+                });
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        private static Color GetStatusColor(string status)
+        {
+            if (status == "Done")
+            {
+                return Color.FromArgb(236, 253, 245);
+            }
+
+            if (status == "Failed" || status == "Timed out")
+            {
+                return Color.FromArgb(254, 242, 242);
+            }
+
+            if (status == "Processing...")
+            {
+                return Color.FromArgb(239, 246, 255);
+            }
+
+            if (status == "Cancelled")
+            {
+                return Color.FromArgb(243, 244, 246);
+            }
+
+            return Color.White;
+        }
+
+        private static void TryKill(Process process)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                    process.WaitForExit();
+                }
+            }
+            catch
+            {
+            }
         }
 
         private static string BuildArguments(string ext, string speed, bool noDither, string file)
@@ -679,62 +1108,6 @@ internal static class PngQuantContext
             }
 
             return args + " " + Quote(file);
-        }
-
-        private void SetProgress(int value, string status, string details, bool marquee)
-        {
-            BeginInvoke((MethodInvoker)delegate
-            {
-                if (marquee)
-                {
-                    _progress.Style = ProgressBarStyle.Marquee;
-                    _progress.MarqueeAnimationSpeed = 24;
-                }
-                else
-                {
-                    _progress.Style = ProgressBarStyle.Continuous;
-                    _progress.MarqueeAnimationSpeed = 0;
-                    _progress.Value = Math.Min(Math.Max(value, _progress.Minimum), _progress.Maximum);
-                }
-
-                if (status != null)
-                {
-                    _status.Text = status;
-                }
-
-                if (details != null)
-                {
-                    _details.Text = details;
-                }
-            });
-        }
-
-        private void Finish(int done, int failed, bool replace)
-        {
-            BeginInvoke((MethodInvoker)delegate
-            {
-                _status.Text = failed == 0
-                    ? "Done: compressed " + done + " PNG file(s)."
-                    : "Done: compressed " + done + ", failed " + failed + ".";
-                _details.Text = failed == 0
-                    ? (replace ? "Source files were replaced." : "Compressed copies were created next to source files.")
-                    : "Details: " + LogPath;
-                _startButton.Enabled = true;
-                _closeButton.Enabled = true;
-                _closeButton.Focus();
-
-                if (_autoRun && failed == 0)
-                {
-                    var timer = new System.Windows.Forms.Timer { Interval = 900 };
-                    timer.Tick += delegate
-                    {
-                        timer.Stop();
-                        timer.Dispose();
-                        Close();
-                    };
-                    timer.Start();
-                }
-            });
         }
 
         private static void AppendLog(string file, string arguments, int exitCode, bool timedOut, string output, long beforeLength, long afterLength)
@@ -757,9 +1130,60 @@ internal static class PngQuantContext
             }
         }
 
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes < 0)
+            {
+                return "";
+            }
+
+            string[] units = { "B", "KB", "MB", "GB" };
+            double value = bytes;
+            var unit = 0;
+
+            while (value >= 1024 && unit < units.Length - 1)
+            {
+                value /= 1024;
+                unit++;
+            }
+
+            return unit == 0 ? bytes + " B" : value.ToString("0.##") + " " + units[unit];
+        }
+
         private static string Quote(string value)
         {
             return "\"" + value.Replace("\"", "\\\"") + "\"";
         }
+
+        private sealed class FileJob
+        {
+            public readonly string Path;
+            public readonly string Name;
+            public readonly long BeforeLength;
+            public long AfterLength = -1;
+            public long SavedBytes;
+            public string Status = "Queued";
+            public bool Success;
+
+            public FileJob(string path)
+            {
+                Path = path;
+                Name = System.IO.Path.GetFileName(path);
+                BeforeLength = File.Exists(path) ? new FileInfo(path).Length : -1;
+            }
+        }
+
+        private sealed class CompressionResult
+        {
+            public string Arguments;
+            public string OutputPath;
+            public int ExitCode;
+            public bool TimedOut;
+            public bool Cancelled;
+            public bool Success;
+            public long AfterLength;
+        }
     }
+
+
 }
