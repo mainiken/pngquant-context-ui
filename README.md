@@ -16,21 +16,29 @@ The submenu contains quick presets:
 - `Compress PNG and replace`
 - `Settings`
 
-The first two commands start compression immediately with the balanced preset. `Settings` opens the compact UI where you can choose output mode, preset, and optional no-dithering mode.
+The first two commands start compression immediately with the balanced preset. `Settings` opens the compact UI without auto-start so you can adjust options before running compression.
 
 When several PNG files are selected, Windows may launch the menu command once per file. The app merges those launches into one batch window automatically.
 
 ## UI
 
-The compression window shows a per-file queue:
+The main compression window is intentionally small because the app is normally launched from Explorer. It shows:
 
-- file name;
-- input size;
-- output size;
-- saved size;
-- current status.
+- a per-file queue;
+- file name and current status;
+- input size, output size, and saved size;
+- overall file progress;
+- `Cancel` while compression is running.
 
-The progress bar tracks completed files in the queue. `pngquant` does not expose percentage progress inside a single file, so the UI does not fake per-file percentages. The `Cancel` button stops the current `pngquant` process and marks the remaining queued files as cancelled.
+Compression options are in the small `...` settings menu:
+
+- copy or replace mode;
+- balanced, quality, or fast preset;
+- no-dithering toggle;
+- light or dark theme;
+- About, version, and GitHub link.
+
+The progress bar tracks completed files in the queue. `pngquant` does not expose percentage progress inside a single file, so the UI does not fake per-file percentages. `Cancel` stops the current `pngquant` process and marks the remaining queued files as cancelled.
 
 ## Requirements and Compatibility
 

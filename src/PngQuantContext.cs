@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
@@ -15,6 +16,8 @@ internal static class PngQuantContext
     private static readonly string LogPath = Path.Combine(AppDirectory, "PngQuantContext.log");
     private const string PngQuantDownloadUrl = "https://pngquant.org/pngquant-windows.zip";
     private const string PngQuantWebsiteUrl = "https://pngquant.org/";
+    private const string GitHubUrl = "https://github.com/mainiken/pngquant-context-ui";
+    private const string AppVersion = "0.4.0";
 
     [STAThread]
     private static int Main(string[] args)
@@ -432,26 +435,41 @@ internal static class PngQuantContext
     {
         private readonly string _pngquant;
         private readonly List<FileJob> _jobs = new List<FileJob>();
-        private readonly ComboBox _preset;
-        private readonly RadioButton _copyMode;
-        private readonly RadioButton _replaceMode;
-        private readonly CheckBox _noDither;
+        private readonly Panel _header;
+        private readonly Label _title;
         private readonly Label _summary;
         private readonly Label _current;
         private readonly Label _details;
-        private readonly ProgressBar _overallProgress;
-        private readonly ListView _fileList;
+        private readonly ThemedProgressBar _overallProgress;
+        private readonly FileQueueView _fileView;
+        private readonly Button _settingsButton;
         private readonly Button _startButton;
         private readonly Button _cancelButton;
         private readonly Button _closeButton;
+        private readonly ContextMenuStrip _settingsMenu;
+        private readonly ToolStripMenuItem _copyMenuItem;
+        private readonly ToolStripMenuItem _replaceMenuItem;
+        private readonly ToolStripMenuItem _balancedMenuItem;
+        private readonly ToolStripMenuItem _qualityMenuItem;
+        private readonly ToolStripMenuItem _fastMenuItem;
+        private readonly ToolStripMenuItem _noDitherMenuItem;
+        private readonly ToolStripMenuItem _lightMenuItem;
+        private readonly ToolStripMenuItem _darkMenuItem;
+        private readonly ToolTip _toolTip;
         private readonly object _processLock = new object();
         private readonly bool _autoRun;
         private volatile bool _cancelRequested;
         private Process _currentProcess;
         private bool _running;
+        private bool _hasStarted;
         private bool _runReplace;
         private bool _runNoDither;
         private string _runSpeed = "3";
+        private bool _settingsReplace;
+        private bool _settingsNoDither;
+        private string _settingsPreset;
+        private string _settingsTheme;
+        private ThemePalette _palette;
 
         public MainForm(string pngquant, List<string> files, RunOptions options)
         {
@@ -465,198 +483,160 @@ internal static class PngQuantContext
 
             Text = "PngQuant Context UI";
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(760, 500);
-            ClientSize = new Size(820, 540);
+            MinimumSize = new Size(380, 500);
+            ClientSize = new Size(400, 560);
             Font = new Font("Segoe UI", 9);
-            BackColor = Color.FromArgb(246, 248, 250);
+            AutoScaleMode = AutoScaleMode.Font;
+            TrySetWindowIcon();
 
-            var header = new Panel
+            _settingsReplace = options.Replace;
+            _settingsNoDither = options.NoDither;
+            _settingsPreset = NormalizePreset(options.Preset);
+            _settingsTheme = LoadThemePreference();
+            _palette = ThemePalette.FromName(_settingsTheme);
+            _toolTip = new ToolTip();
+
+            _header = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 78,
-                BackColor = Color.FromArgb(31, 41, 55)
+                Height = 66
             };
 
-            var title = new Label
+            _title = new Label
             {
                 AutoSize = false,
-                Location = new Point(20, 15),
-                Size = new Size(500, 26),
+                Location = new Point(18, 14),
+                Size = new Size(190, 24),
                 Font = new Font("Segoe UI", 12, FontStyle.Bold),
-                ForeColor = Color.White,
-                Text = "Compress PNG files"
+                Text = "PNG compression"
             };
 
             _summary = new Label
             {
                 AutoSize = false,
-                Location = new Point(20, 43),
-                Size = new Size(760, 22),
-                ForeColor = Color.FromArgb(209, 213, 219),
+                Location = new Point(18, 39),
+                Size = new Size(260, 20),
                 Text = BuildReadySummary()
             };
 
-            header.Controls.Add(title);
-            header.Controls.Add(_summary);
-
-            var optionsPanel = new Panel
+            _settingsButton = new Button
             {
-                Dock = DockStyle.Top,
-                Height = 86,
-                BackColor = Color.White
-            };
-
-            var modeLabel = new Label
-            {
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 AutoSize = false,
-                Location = new Point(20, 17),
-                Size = new Size(72, 22),
-                Text = "Mode"
+                Location = new Point(352, 17),
+                Size = new Size(30, 28),
+                Text = "...",
+                TabStop = false
             };
-
-            _copyMode = new RadioButton
+            _settingsButton.Click += delegate
             {
-                Location = new Point(96, 15),
-                Size = new Size(75, 24),
-                Text = "Copy",
-                Checked = !options.Replace
+                ShowSettingsMenu();
             };
+            _toolTip.SetToolTip(_settingsButton, "Settings");
 
-            _replaceMode = new RadioButton
-            {
-                Location = new Point(174, 15),
-                Size = new Size(90, 24),
-                Text = "Replace",
-                Checked = options.Replace
-            };
+            _settingsMenu = new ContextMenuStrip();
+            _copyMenuItem = AddMenuItem("Mode: Copy", delegate { SetMode(false); });
+            _replaceMenuItem = AddMenuItem("Mode: Replace", delegate { SetMode(true); });
+            _settingsMenu.Items.Add(new ToolStripSeparator());
+            _balancedMenuItem = AddMenuItem("Preset: Balanced", delegate { SetPreset("balanced"); });
+            _qualityMenuItem = AddMenuItem("Preset: Quality", delegate { SetPreset("quality"); });
+            _fastMenuItem = AddMenuItem("Preset: Fast", delegate { SetPreset("fast"); });
+            _settingsMenu.Items.Add(new ToolStripSeparator());
+            _noDitherMenuItem = AddMenuItem("No dithering", delegate { ToggleNoDither(); });
+            _settingsMenu.Items.Add(new ToolStripSeparator());
+            _lightMenuItem = AddMenuItem("Theme: Light", delegate { SetTheme("Light"); });
+            _darkMenuItem = AddMenuItem("Theme: Dark", delegate { SetTheme("Dark"); });
+            _settingsMenu.Items.Add(new ToolStripSeparator());
+            AddMenuItem("About", delegate { ShowAbout(); });
+            AddMenuItem("Open GitHub", delegate { OpenGitHub(); });
+            UpdateSettingsMenu();
 
-            var presetLabel = new Label
-            {
-                AutoSize = false,
-                Location = new Point(20, 49),
-                Size = new Size(72, 22),
-                Text = "Preset"
-            };
-
-            _preset = new ComboBox
-            {
-                Location = new Point(96, 46),
-                Size = new Size(220, 24),
-                DropDownStyle = ComboBoxStyle.DropDownList
-            };
-            _preset.Items.Add("Balanced (speed 3)");
-            _preset.Items.Add("Best quality (speed 1)");
-            _preset.Items.Add("Fast (speed 8)");
-            _preset.SelectedIndex = options.Preset == "quality" ? 1 : (options.Preset == "fast" ? 2 : 0);
-
-            _noDither = new CheckBox
-            {
-                Location = new Point(340, 47),
-                Size = new Size(150, 24),
-                Text = "Disable dithering",
-                Checked = options.NoDither
-            };
+            _header.Controls.Add(_title);
+            _header.Controls.Add(_summary);
+            _header.Controls.Add(_settingsButton);
 
             _startButton = new Button
             {
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(514, 24),
-                Size = new Size(92, 30),
-                Text = "Compress"
+                Location = new Point(186, 520),
+                Size = new Size(86, 28),
+                Text = "Compress",
+                Visible = !_autoRun
             };
             _startButton.Click += delegate { StartCompression(); };
 
             _cancelButton = new Button
             {
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(612, 24),
-                Size = new Size(82, 30),
+                Location = new Point(278, 520),
+                Size = new Size(64, 28),
                 Text = "Cancel",
-                Enabled = false
+                Enabled = false,
+                Visible = false
             };
             _cancelButton.Click += delegate { CancelCompression(); };
 
             _closeButton = new Button
             {
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(700, 24),
-                Size = new Size(82, 30),
+                Location = new Point(278, 520),
+                Size = new Size(62, 28),
                 Text = "Close"
             };
             _closeButton.Click += delegate { Close(); };
 
-            optionsPanel.Controls.Add(modeLabel);
-            optionsPanel.Controls.Add(_copyMode);
-            optionsPanel.Controls.Add(_replaceMode);
-            optionsPanel.Controls.Add(presetLabel);
-            optionsPanel.Controls.Add(_preset);
-            optionsPanel.Controls.Add(_noDither);
-            optionsPanel.Controls.Add(_startButton);
-            optionsPanel.Controls.Add(_cancelButton);
-            optionsPanel.Controls.Add(_closeButton);
-
-            _fileList = new ListView
+            _fileView = new FileQueueView
             {
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                Location = new Point(18, 180),
-                Size = new Size(784, 275),
-                View = View.Details,
-                FullRowSelect = true,
-                GridLines = false,
-                HideSelection = false,
-                ShowItemToolTips = true,
-                BorderStyle = BorderStyle.FixedSingle,
-                BackColor = Color.White
+                Location = new Point(14, 74),
+                Size = new Size(412, 330),
+                Font = Font
             };
-            _fileList.Columns.Add("File", 320);
-            _fileList.Columns.Add("Before", 95, HorizontalAlignment.Right);
-            _fileList.Columns.Add("After", 95, HorizontalAlignment.Right);
-            _fileList.Columns.Add("Saved", 95, HorizontalAlignment.Right);
-            _fileList.Columns.Add("Status", 170);
-
-            foreach (var job in _jobs)
-            {
-                _fileList.Items.Add(CreateListItem(job));
-            }
+            _fileView.SetJobs(_jobs);
 
             _current = new Label
             {
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 AutoSize = false,
-                Location = new Point(18, 464),
-                Size = new Size(784, 22),
+                Location = new Point(14, 502),
+                Size = new Size(412, 20),
                 Text = "Ready."
             };
 
-            _overallProgress = new ProgressBar
+            _overallProgress = new ThemedProgressBar
             {
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
-                Location = new Point(18, 490),
-                Size = new Size(784, 18),
+                Location = new Point(14, 526),
+                Size = new Size(412, 8),
                 Minimum = 0,
                 Maximum = Math.Max(_jobs.Count, 1),
-                Value = 0,
-                Style = ProgressBarStyle.Continuous
+                Value = 0
             };
 
             _details = new Label
             {
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 AutoSize = false,
-                Location = new Point(18, 514),
-                Size = new Size(784, 20),
-                ForeColor = Color.FromArgb(95, 105, 117),
-                Text = "pngquant: " + _pngquant
+                Location = new Point(14, 539),
+                Size = new Size(412, 18),
+                Text = "Ready to compress."
             };
 
             Controls.Add(_details);
             Controls.Add(_overallProgress);
             Controls.Add(_current);
-            Controls.Add(_fileList);
-            Controls.Add(optionsPanel);
-            Controls.Add(header);
+            Controls.Add(_startButton);
+            Controls.Add(_cancelButton);
+            Controls.Add(_closeButton);
+            Controls.Add(_fileView);
+            Controls.Add(_header);
+            ApplyTheme();
+            LayoutContent();
 
-            Resize += delegate { ResizeColumns(); };
+            Resize += delegate
+            {
+                LayoutContent();
+            };
             FormClosing += delegate(object sender, FormClosingEventArgs args)
             {
                 if (_running)
@@ -667,12 +647,260 @@ internal static class PngQuantContext
             };
             Shown += delegate
             {
-                ResizeColumns();
+                LayoutContent();
                 if (_autoRun)
                 {
                     StartCompression();
                 }
             };
+        }
+
+        private void LayoutContent()
+        {
+            var width = Math.Max(ClientSize.Width, MinimumSize.Width);
+            var height = Math.Max(ClientSize.Height, MinimumSize.Height);
+            var left = 14;
+            var right = width - 14;
+            var contentWidth = Math.Max(260, width - (left * 2));
+            var listTop = _header.Height + 8;
+            var listHeight = Math.Max(170, height - listTop - 76);
+
+            _settingsButton.Location = new Point(right - _settingsButton.Width, 17);
+            _summary.Width = Math.Max(190, _settingsButton.Left - _summary.Left - 12);
+
+            var buttonTop = height - 36;
+            _closeButton.Location = new Point(right - _closeButton.Width, buttonTop);
+            if (_cancelButton.Visible)
+            {
+                _cancelButton.Location = new Point(right - _cancelButton.Width, buttonTop);
+                _startButton.Location = new Point(_cancelButton.Left - _startButton.Width - 8, buttonTop);
+            }
+            else
+            {
+                _startButton.Location = new Point(_closeButton.Left - _startButton.Width - 8, buttonTop);
+            }
+
+            _fileView.Location = new Point(left, listTop);
+            _fileView.Size = new Size(contentWidth, listHeight);
+
+            var footerTop = _fileView.Bottom + 8;
+            _current.Location = new Point(left, footerTop);
+            _current.Size = new Size(contentWidth, 20);
+            _overallProgress.Location = new Point(left, footerTop + 24);
+            _overallProgress.Size = new Size(contentWidth, 8);
+            _details.Location = new Point(left, footerTop + 38);
+            _details.Size = new Size(Math.Max(120, _startButton.Left - left - 10), 18);
+        }
+
+        private void ApplyTheme()
+        {
+            _palette = ThemePalette.FromName(GetSelectedThemeName());
+
+            BackColor = _palette.Window;
+            _header.BackColor = _palette.Window;
+            _fileView.SetPalette(_palette);
+            _overallProgress.SetPalette(_palette);
+
+            ApplyLabel(_title, _palette.Text);
+            ApplyLabel(_summary, _palette.Muted);
+            ApplyLabel(_current, _palette.Text);
+            ApplyLabel(_details, _palette.Muted);
+
+            ApplyButton(_settingsButton, false);
+            ApplyButton(_startButton, true);
+            ApplyButton(_cancelButton, false);
+            ApplyButton(_closeButton, false);
+            UpdateSettingsMenu();
+
+            _fileView.Invalidate();
+        }
+
+        private void ApplyLabel(Label label, Color color)
+        {
+            label.BackColor = Color.Transparent;
+            label.ForeColor = color;
+        }
+
+        private void ApplyButton(Button button, bool primary)
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.UseVisualStyleBackColor = false;
+            button.BackColor = primary ? _palette.Accent : _palette.Input;
+            button.ForeColor = primary ? Color.White : _palette.Text;
+            button.FlatAppearance.BorderColor = primary ? _palette.Accent : _palette.Border;
+            button.FlatAppearance.BorderSize = 1;
+        }
+
+        private ToolStripMenuItem AddMenuItem(string text, EventHandler handler)
+        {
+            var item = new ToolStripMenuItem(text);
+            item.Click += handler;
+            _settingsMenu.Items.Add(item);
+            return item;
+        }
+
+        private void ShowSettingsMenu()
+        {
+            UpdateSettingsMenu();
+            _settingsMenu.Show(_settingsButton, new Point(0, _settingsButton.Height + 2));
+        }
+
+        private void SetMode(bool replace)
+        {
+            _settingsReplace = replace;
+            UpdateSettingsMenu();
+        }
+
+        private void SetPreset(string preset)
+        {
+            _settingsPreset = NormalizePreset(preset);
+            UpdateSettingsMenu();
+        }
+
+        private void ToggleNoDither()
+        {
+            _settingsNoDither = !_settingsNoDither;
+            UpdateSettingsMenu();
+        }
+
+        private void SetTheme(string theme)
+        {
+            _settingsTheme = string.Equals(theme, "Dark", StringComparison.OrdinalIgnoreCase) ? "Dark" : "Light";
+            SaveThemePreference(_settingsTheme);
+            ApplyTheme();
+        }
+
+        private void UpdateSettingsMenu()
+        {
+            _settingsMenu.BackColor = _palette.Surface;
+            _settingsMenu.ForeColor = _palette.Text;
+
+            _copyMenuItem.Checked = !_settingsReplace;
+            _replaceMenuItem.Checked = _settingsReplace;
+            _balancedMenuItem.Checked = _settingsPreset == "balanced";
+            _qualityMenuItem.Checked = _settingsPreset == "quality";
+            _fastMenuItem.Checked = _settingsPreset == "fast";
+            _noDitherMenuItem.Checked = _settingsNoDither;
+            _lightMenuItem.Checked = _settingsTheme != "Dark";
+            _darkMenuItem.Checked = _settingsTheme == "Dark";
+        }
+
+        private void ShowAbout()
+        {
+            var result = MessageBox.Show(
+                "PngQuant Context UI" + Environment.NewLine +
+                "Version " + AppVersion + Environment.NewLine +
+                Environment.NewLine +
+                "Windows 11 context-menu UI for pngquant." + Environment.NewLine +
+                GitHubUrl + Environment.NewLine +
+                Environment.NewLine +
+                "Open GitHub?",
+                "About",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Information);
+
+            if (result == DialogResult.Yes)
+            {
+                OpenGitHub();
+            }
+        }
+
+        private static void OpenGitHub()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(GitHubUrl) { UseShellExecute = true });
+            }
+            catch
+            {
+            }
+        }
+
+        private void TrySetWindowIcon()
+        {
+            try
+            {
+                var icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (icon != null)
+                {
+                    Icon = icon;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private string GetSelectedThemeName()
+        {
+            return string.Equals(_settingsTheme, "Dark", StringComparison.OrdinalIgnoreCase) ? "Dark" : "Light";
+        }
+
+        private static string NormalizePreset(string preset)
+        {
+            if (string.Equals(preset, "quality", StringComparison.OrdinalIgnoreCase))
+            {
+                return "quality";
+            }
+
+            if (string.Equals(preset, "fast", StringComparison.OrdinalIgnoreCase))
+            {
+                return "fast";
+            }
+
+            return "balanced";
+        }
+
+        private static string LoadThemePreference()
+        {
+            try
+            {
+                var settingsPath = GetSettingsPath();
+                if (File.Exists(settingsPath))
+                {
+                    foreach (var line in File.ReadAllLines(settingsPath))
+                    {
+                        var trimmed = line.Trim();
+                        if (trimmed.StartsWith("Theme=", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var value = trimmed.Substring("Theme=".Length).Trim();
+                            if (string.Equals(value, "Dark", StringComparison.OrdinalIgnoreCase))
+                            {
+                                return "Dark";
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return "Light";
+        }
+
+        private static void SaveThemePreference(string theme)
+        {
+            try
+            {
+                var settingsPath = GetSettingsPath();
+                Directory.CreateDirectory(Path.GetDirectoryName(settingsPath));
+                File.WriteAllText(settingsPath, "Theme=" + theme + Environment.NewLine);
+            }
+            catch
+            {
+            }
+        }
+
+        private static string GetSettingsPath()
+        {
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrEmpty(localAppData))
+            {
+                return Path.Combine(AppDirectory, "settings.ini");
+            }
+
+            return Path.Combine(localAppData, "PngQuantContext", "settings.ini");
         }
 
         private void StartCompression()
@@ -682,11 +910,12 @@ internal static class PngQuantContext
                 return;
             }
 
-            _runReplace = _replaceMode.Checked;
-            _runNoDither = _noDither.Checked;
-            _runSpeed = _preset.SelectedIndex == 1 ? "1" : (_preset.SelectedIndex == 2 ? "8" : "3");
+            _runReplace = _settingsReplace;
+            _runNoDither = _settingsNoDither;
+            _runSpeed = _settingsPreset == "quality" ? "1" : (_settingsPreset == "fast" ? "8" : "3");
             _cancelRequested = false;
             _running = true;
+            _hasStarted = true;
 
             foreach (var job in _jobs)
             {
@@ -884,13 +1113,14 @@ internal static class PngQuantContext
 
         private void SetControlsForRunning(bool running)
         {
-            _copyMode.Enabled = !running;
-            _replaceMode.Enabled = !running;
-            _preset.Enabled = !running;
-            _noDither.Enabled = !running;
+            _settingsButton.Enabled = !running;
+            _startButton.Visible = !running && !_hasStarted;
             _startButton.Enabled = !running;
+            _cancelButton.Visible = running;
             _cancelButton.Enabled = running;
+            _closeButton.Visible = !running;
             _closeButton.Enabled = !running;
+            LayoutContent();
         }
 
         private void MarkRemainingCancelled(int startIndex)
@@ -919,27 +1149,15 @@ internal static class PngQuantContext
                     job.Success = success.Value;
                 }
 
-                var item = _fileList.Items[index];
-                item.SubItems[2].Text = FormatBytes(job.AfterLength);
-                item.SubItems[3].Text = job.AfterLength > 0 ? FormatBytes(job.SavedBytes) : "";
-                item.SubItems[4].Text = job.Status;
-                item.BackColor = GetStatusColor(job.Status);
-                _fileList.EnsureVisible(index);
+                _fileView.EnsureVisible(index);
+                _fileView.Invalidate();
                 _summary.Text = BuildProgressSummary();
             });
         }
 
         private void RefreshAllRows()
         {
-            for (var i = 0; i < _jobs.Count; i++)
-            {
-                var job = _jobs[i];
-                var item = _fileList.Items[i];
-                item.SubItems[2].Text = "";
-                item.SubItems[3].Text = "";
-                item.SubItems[4].Text = job.Status;
-                item.BackColor = Color.White;
-            }
+            _fileView.Invalidate();
         }
 
         private void SetOverallProgress(int value)
@@ -1015,28 +1233,6 @@ internal static class PngQuantContext
             return total;
         }
 
-        private ListViewItem CreateListItem(FileJob job)
-        {
-            var item = new ListViewItem(job.Name);
-            item.SubItems.Add(FormatBytes(job.BeforeLength));
-            item.SubItems.Add("");
-            item.SubItems.Add("");
-            item.SubItems.Add(job.Status);
-            item.ToolTipText = job.Path;
-            return item;
-        }
-
-        private void ResizeColumns()
-        {
-            if (_fileList.Columns.Count == 0)
-            {
-                return;
-            }
-
-            var fixedWidth = 95 + 95 + 95 + 170 + 8;
-            _fileList.Columns[0].Width = Math.Max(220, _fileList.ClientSize.Width - fixedWidth);
-        }
-
         private void RunOnUi(MethodInvoker action)
         {
             if (IsDisposed)
@@ -1059,29 +1255,408 @@ internal static class PngQuantContext
             }
         }
 
-        private static Color GetStatusColor(string status)
+        private static Color GetStatusColor(string status, ThemePalette palette)
         {
             if (status == "Done")
             {
-                return Color.FromArgb(236, 253, 245);
+                return palette.Done;
             }
 
             if (status == "Failed" || status == "Timed out")
             {
-                return Color.FromArgb(254, 242, 242);
+                return palette.Error;
             }
 
             if (status == "Processing...")
             {
-                return Color.FromArgb(239, 246, 255);
+                return palette.Active;
             }
 
             if (status == "Cancelled")
             {
-                return Color.FromArgb(243, 244, 246);
+                return palette.Cancelled;
             }
 
-            return Color.White;
+            return palette.SurfaceAlt;
+        }
+
+        private static GraphicsPath CreateRoundedRectangle(RectangleF bounds, float radius)
+        {
+            var path = new GraphicsPath();
+            var diameter = radius * 2f;
+
+            if (diameter <= 0f)
+            {
+                path.AddRectangle(bounds);
+                path.CloseFigure();
+                return path;
+            }
+
+            var arc = new RectangleF(bounds.X, bounds.Y, diameter, diameter);
+            path.AddArc(arc, 180, 90);
+            arc.X = bounds.Right - diameter;
+            path.AddArc(arc, 270, 90);
+            arc.Y = bounds.Bottom - diameter;
+            path.AddArc(arc, 0, 90);
+            arc.X = bounds.X;
+            path.AddArc(arc, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static StringFormat CreateTextFormat(StringAlignment alignment)
+        {
+            return new StringFormat
+            {
+                Alignment = alignment,
+                LineAlignment = StringAlignment.Center,
+                Trimming = StringTrimming.EllipsisCharacter,
+                FormatFlags = StringFormatFlags.NoWrap
+            };
+        }
+
+        private sealed class ThemedProgressBar : Control
+        {
+            private ThemePalette _palette = ThemePalette.FromName("Light");
+            private int _minimum;
+            private int _maximum = 100;
+            private int _value;
+
+            public int Minimum
+            {
+                get { return _minimum; }
+                set
+                {
+                    _minimum = Math.Max(0, value);
+                    if (_maximum < _minimum)
+                    {
+                        _maximum = _minimum;
+                    }
+                    Value = _value;
+                }
+            }
+
+            public int Maximum
+            {
+                get { return _maximum; }
+                set
+                {
+                    _maximum = Math.Max(_minimum, value);
+                    Value = _value;
+                }
+            }
+
+            public int Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = Math.Min(Math.Max(value, _minimum), _maximum);
+                    Invalidate();
+                }
+            }
+
+            public ThemedProgressBar()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+            }
+
+            public void SetPalette(ThemePalette palette)
+            {
+                _palette = palette;
+                Invalidate();
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+                var bounds = new RectangleF(0, 0, Width - 1, Height - 1);
+                using (var track = new SolidBrush(_palette.Input))
+                using (var border = new Pen(_palette.Border))
+                using (var trackPath = CreateRoundedRectangle(bounds, Height / 2f))
+                {
+                    e.Graphics.FillPath(track, trackPath);
+                    e.Graphics.DrawPath(border, trackPath);
+                }
+
+                var range = Math.Max(1, _maximum - _minimum);
+                var ratio = (_value - _minimum) / (float)range;
+                if (ratio <= 0f)
+                {
+                    return;
+                }
+
+                var fillWidth = Math.Max(Height, (Width - 1) * ratio);
+                var fillBounds = new RectangleF(0, 0, fillWidth, Height - 1);
+                using (var fill = new SolidBrush(_palette.Accent))
+                using (var fillPath = CreateRoundedRectangle(fillBounds, Height / 2f))
+                {
+                    e.Graphics.FillPath(fill, fillPath);
+                }
+            }
+        }
+
+        private sealed class FileQueueView : Control
+        {
+            private readonly List<FileJob> _jobs = new List<FileJob>();
+            private ThemePalette _palette = ThemePalette.FromName("Light");
+            private int _scrollOffset;
+            private const int PaddingSize = 8;
+            private const int RowHeight = 58;
+            private const int RowGap = 8;
+
+            public FileQueueView()
+            {
+                SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.UserPaint, true);
+                TabStop = false;
+            }
+
+            public void SetJobs(IEnumerable<FileJob> jobs)
+            {
+                _jobs.Clear();
+                _jobs.AddRange(jobs);
+                _scrollOffset = 0;
+                Invalidate();
+            }
+
+            public void SetPalette(ThemePalette palette)
+            {
+                _palette = palette;
+                BackColor = palette.Window;
+                Invalidate();
+            }
+
+            public void EnsureVisible(int index)
+            {
+                if (index < 0 || index >= _jobs.Count)
+                {
+                    return;
+                }
+
+                var rowTop = PaddingSize + index * (RowHeight + RowGap);
+                var rowBottom = rowTop + RowHeight;
+                var viewHeight = Math.Max(1, Height - PaddingSize * 2);
+
+                if (rowTop - _scrollOffset < PaddingSize)
+                {
+                    _scrollOffset = Math.Max(0, rowTop - PaddingSize);
+                }
+                else if (rowBottom - _scrollOffset > viewHeight)
+                {
+                    _scrollOffset = Math.Max(0, rowBottom - viewHeight);
+                }
+
+                ClampScroll();
+                Invalidate();
+            }
+
+            protected override void OnMouseWheel(MouseEventArgs e)
+            {
+                base.OnMouseWheel(e);
+                _scrollOffset -= Math.Sign(e.Delta) * 42;
+                ClampScroll();
+                Invalidate();
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+                var shell = new RectangleF(0, 0, Width - 1, Height - 1);
+                using (var surface = new SolidBrush(_palette.Surface))
+                using (var border = new Pen(_palette.Border))
+                using (var path = CreateRoundedRectangle(shell, 8f))
+                {
+                    e.Graphics.FillPath(surface, path);
+                    e.Graphics.DrawPath(border, path);
+                }
+
+                var content = new Rectangle(PaddingSize, PaddingSize, Math.Max(1, Width - PaddingSize * 2), Math.Max(1, Height - PaddingSize * 2));
+                e.Graphics.SetClip(content);
+
+                if (_jobs.Count == 0)
+                {
+                    DrawCenteredText(e.Graphics, "No files", content, _palette.Muted);
+                    e.Graphics.ResetClip();
+                    return;
+                }
+
+                using (var nameFont = new Font(Font.FontFamily, 9f, FontStyle.Bold))
+                using (var smallFont = new Font(Font.FontFamily, 8.2f, FontStyle.Regular))
+                {
+                    for (var i = 0; i < _jobs.Count; i++)
+                    {
+                        var y = PaddingSize + i * (RowHeight + RowGap) - _scrollOffset;
+                        var row = new RectangleF(PaddingSize, y, Width - PaddingSize * 2 - 1, RowHeight);
+
+                        if (row.Bottom < PaddingSize || row.Top > Height - PaddingSize)
+                        {
+                            continue;
+                        }
+
+                        DrawJobRow(e.Graphics, row, _jobs[i], nameFont, smallFont);
+                    }
+                }
+
+                e.Graphics.ResetClip();
+                DrawScrollBar(e.Graphics);
+            }
+
+            private void DrawJobRow(Graphics graphics, RectangleF row, FileJob job, Font nameFont, Font smallFont)
+            {
+                var rowColor = GetStatusColor(job.Status, _palette);
+                using (var background = new SolidBrush(rowColor))
+                using (var border = new Pen(_palette.RowBorder))
+                using (var path = CreateRoundedRectangle(row, 7f))
+                {
+                    graphics.FillPath(background, path);
+                    graphics.DrawPath(border, path);
+                }
+
+                var statusText = job.Status == "Processing..." ? "Working" : job.Status;
+                var statusWidth = Math.Max(58, Math.Min(88, (int)graphics.MeasureString(statusText, smallFont).Width + 20));
+                var statusRect = new RectangleF(row.Right - statusWidth - 10, row.Top + 9, statusWidth, 20);
+                var statusColor = job.Status == "Done" ? _palette.SuccessAccent :
+                    (job.Status == "Failed" || job.Status == "Timed out" ? _palette.ErrorAccent :
+                    (job.Status == "Processing..." ? _palette.Accent : _palette.Muted));
+
+                using (var statusBrush = new SolidBrush(statusColor))
+                using (var statusTextBrush = new SolidBrush(Color.White))
+                using (var statusPath = CreateRoundedRectangle(statusRect, 10f))
+                using (var center = CreateTextFormat(StringAlignment.Center))
+                {
+                    graphics.FillPath(statusBrush, statusPath);
+                    graphics.DrawString(statusText, smallFont, statusTextBrush, statusRect, center);
+                }
+
+                var nameRect = new RectangleF(row.Left + 12, row.Top + 8, Math.Max(40, row.Width - statusWidth - 30), 22);
+                using (var text = new SolidBrush(_palette.Text))
+                using (var muted = new SolidBrush(_palette.Muted))
+                using (var left = CreateTextFormat(StringAlignment.Near))
+                {
+                    graphics.DrawString(job.Name, nameFont, text, nameRect, left);
+
+                    var after = job.AfterLength > 0 ? FormatBytes(job.AfterLength) : "--";
+                    var saved = job.AfterLength > 0 ? FormatBytes(job.SavedBytes) : "--";
+                    var metrics = "Before " + FormatBytes(job.BeforeLength) + "   After " + after + "   Saved " + saved;
+                    var metricsRect = new RectangleF(row.Left + 12, row.Top + 32, row.Width - 24, 18);
+                    graphics.DrawString(metrics, smallFont, muted, metricsRect, left);
+                }
+            }
+
+            private void DrawScrollBar(Graphics graphics)
+            {
+                var contentHeight = GetContentHeight();
+                if (contentHeight <= Height)
+                {
+                    return;
+                }
+
+                var track = new RectangleF(Width - 5, PaddingSize + 4, 3, Height - PaddingSize * 2 - 8);
+                var thumbHeight = Math.Max(24f, track.Height * Height / contentHeight);
+                var maxOffset = Math.Max(1, contentHeight - Height);
+                var thumbTop = track.Top + (track.Height - thumbHeight) * _scrollOffset / maxOffset;
+                var thumb = new RectangleF(track.Left, thumbTop, track.Width, thumbHeight);
+
+                using (var brush = new SolidBrush(_palette.ScrollThumb))
+                using (var path = CreateRoundedRectangle(thumb, 2f))
+                {
+                    graphics.FillPath(brush, path);
+                }
+            }
+
+            private void DrawCenteredText(Graphics graphics, string text, Rectangle bounds, Color color)
+            {
+                using (var brush = new SolidBrush(color))
+                using (var format = CreateTextFormat(StringAlignment.Center))
+                {
+                    graphics.DrawString(text, Font, brush, bounds, format);
+                }
+            }
+
+            private int GetContentHeight()
+            {
+                return PaddingSize * 2 + _jobs.Count * RowHeight + Math.Max(0, _jobs.Count - 1) * RowGap;
+            }
+
+            private void ClampScroll()
+            {
+                var maxOffset = Math.Max(0, GetContentHeight() - Height);
+                _scrollOffset = Math.Min(Math.Max(0, _scrollOffset), maxOffset);
+            }
+        }
+
+        private sealed class ThemePalette
+        {
+            public string Name;
+            public Color Window;
+            public Color Surface;
+            public Color SurfaceAlt;
+            public Color Input;
+            public Color Text;
+            public Color Muted;
+            public Color Border;
+            public Color RowBorder;
+            public Color Accent;
+            public Color SuccessAccent;
+            public Color ErrorAccent;
+            public Color ScrollThumb;
+            public Color Active;
+            public Color Done;
+            public Color Error;
+            public Color Cancelled;
+
+            public static ThemePalette FromName(string name)
+            {
+                if (string.Equals(name, "Dark", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new ThemePalette
+                    {
+                        Name = "Dark",
+                        Window = Color.FromArgb(28, 29, 32),
+                        Surface = Color.FromArgb(36, 38, 42),
+                        SurfaceAlt = Color.FromArgb(40, 42, 47),
+                        Input = Color.FromArgb(43, 46, 53),
+                        Text = Color.FromArgb(242, 243, 245),
+                        Muted = Color.FromArgb(169, 173, 181),
+                        Border = Color.FromArgb(58, 62, 70),
+                        RowBorder = Color.FromArgb(54, 58, 66),
+                        Accent = Color.FromArgb(83, 99, 218),
+                        SuccessAccent = Color.FromArgb(57, 148, 92),
+                        ErrorAccent = Color.FromArgb(224, 82, 96),
+                        ScrollThumb = Color.FromArgb(84, 87, 96),
+                        Active = Color.FromArgb(37, 50, 71),
+                        Done = Color.FromArgb(32, 56, 43),
+                        Error = Color.FromArgb(60, 37, 41),
+                        Cancelled = Color.FromArgb(48, 50, 54)
+                    };
+                }
+
+                return new ThemePalette
+                {
+                    Name = "Light",
+                    Window = Color.FromArgb(246, 247, 249),
+                    Surface = Color.FromArgb(255, 255, 255),
+                    SurfaceAlt = Color.FromArgb(249, 250, 252),
+                    Input = Color.FromArgb(240, 243, 248),
+                    Text = Color.FromArgb(32, 33, 36),
+                    Muted = Color.FromArgb(100, 110, 125),
+                    Border = Color.FromArgb(205, 214, 226),
+                    RowBorder = Color.FromArgb(226, 231, 238),
+                    Accent = Color.FromArgb(61, 86, 214),
+                    SuccessAccent = Color.FromArgb(45, 145, 88),
+                    ErrorAccent = Color.FromArgb(218, 71, 88),
+                    ScrollThumb = Color.FromArgb(190, 198, 211),
+                    Active = Color.FromArgb(238, 244, 255),
+                    Done = Color.FromArgb(234, 248, 240),
+                    Error = Color.FromArgb(255, 241, 242),
+                    Cancelled = Color.FromArgb(242, 243, 245)
+                };
+            }
         }
 
         private static void TryKill(Process process)
