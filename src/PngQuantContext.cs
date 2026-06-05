@@ -663,12 +663,12 @@ internal static class PngQuantContext
             var right = width - 14;
             var contentWidth = Math.Max(260, width - (left * 2));
             var listTop = _header.Height + 8;
-            var listHeight = Math.Max(170, height - listTop - 76);
+            var buttonTop = height - 42;
+            var listHeight = Math.Max(170, buttonTop - listTop - 76);
 
             _settingsButton.Location = new Point(right - _settingsButton.Width, 17);
             _summary.Width = Math.Max(190, _settingsButton.Left - _summary.Left - 12);
 
-            var buttonTop = height - 36;
             _closeButton.Location = new Point(right - _closeButton.Width, buttonTop);
             if (_cancelButton.Visible)
             {
@@ -686,9 +686,9 @@ internal static class PngQuantContext
             var footerTop = _fileView.Bottom + 8;
             _current.Location = new Point(left, footerTop);
             _current.Size = new Size(contentWidth, 20);
-            _overallProgress.Location = new Point(left, footerTop + 24);
+            _overallProgress.Location = new Point(left, footerTop + 28);
             _overallProgress.Size = new Size(contentWidth, 8);
-            _details.Location = new Point(left, footerTop + 38);
+            _details.Location = new Point(left, footerTop + 48);
             _details.Size = new Size(Math.Max(120, _startButton.Left - left - 10), 18);
         }
 
