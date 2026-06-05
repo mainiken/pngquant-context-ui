@@ -6,3 +6,4 @@ dist/
 *.user
 *.suo
 .vs/
+PROJECT_MEMORY.local.md
